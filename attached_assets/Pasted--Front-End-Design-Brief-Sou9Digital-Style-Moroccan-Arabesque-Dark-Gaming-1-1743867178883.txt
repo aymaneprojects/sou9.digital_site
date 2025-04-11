@@ -1,0 +1,100 @@
+## 🎮 Front-End Design Brief – *Sou9Digital*
+**Style**: Moroccan-Arabesque × Dark Gaming
+
+---
+
+### 1. 🧬 Brand Identity & Mood
+- **Vision**: A digital gaming store made in Morocco, with strong cultural roots and a futuristic flair.
+- **Mood**: Mysterious, immersive, high-energy.
+- **Inspiration**: Mashrabiya patterns, Moroccan tile symmetry, warm souk vibes — combined with sleek gaming UI.
+
+#### 🎨 Color Palette
+| Element              | Hex Code        | Usage                                          |
+|----------------------|------------------|------------------------------------------------|
+| Background           | `#0a0f1a`        | Main background, deep navy                    |
+| Overlay/Containers   | `#132743`        | Used for cards, popups                        |
+| Accent Yellow        | `#FFD700`        | CTAs, highlights, gold glow effect            |
+| Accent Red           | `#E63946`        | Warnings, urgent actions, some patterns       |
+| Pattern Lines        | `#B8860B`        | Arabesque lines & separators (golden hue)     |
+| Text Primary         | `#FFFFFF`        | Headings, strong labels                       |
+| Text Secondary       | `#C0C0C0`        | Descriptions, muted text                      |
+
+---
+
+### 2. 🔤 Typography
+- **Title Font**: `Cairo Play` – modern Arabic-inspired font, elegant yet futuristic.
+- **Body Font**: `Noto Sans Arabic` or `DM Sans` – smooth, clear and professional.
+- **Backup Fonts**: `sans-serif`, no robotic look.
+
+```css
+font-family: 'Cairo Play', 'DM Sans', sans-serif;
+```
+
+---
+
+### 3. 🧭 Layout & UX Structure
+- **Header**: Logo left (inspired by a Moroccan stamp), nav bar on the right (transparent, turns navy when scrolling).
+- **Menu Items**: Home | Store | Wallet | Support | My Account
+- **Hero Section**:
+  - Full-screen
+  - Animated background (slow glowing mashrabiya patterns or starscape)
+  - Central CTA: "Start Shopping" or "Explore the Bazaar"
+- **Cards**:
+  - Rounded corners (radius: 1.25rem)
+  - Soft shadows and subtle golden glow on hover
+- **Footer**:
+  - Arabesque pattern background
+  - Socials + Contact + Terms links in 3 columns
+
+---
+
+### 4. 🔘 Buttons & UI Components
+#### Primary CTA Button
+- **Background**: `#FFD700`
+- **Text**: `#0a0f1a`
+- **Border-radius**: `0.75rem`
+- **Hover Effect**: Glowing outline + slight scale up
+
+#### Secondary Button
+- **Background**: transparent
+- **Border**: `1px solid #FFD700`
+- **Text**: `#FFD700`
+- **Hover**: Fill with golden background, fade in
+
+#### Cards
+- Box shadows with light gold tone
+- On hover: soft bounce or slight tilt + glow edge effect
+
+---
+
+### 5. 📱 Mobile & Responsive
+- Mobile-first layout
+- Hamburger menu with mashrabiya-style icon
+- Cards stack vertically, CTA always visible at bottom
+- Touch-friendly buttons
+
+---
+
+### 6. ✨ Visual Effects
+- Floating golden particles (subtle) on homepage
+- Section separators: Moroccan tile-inspired patterns
+- Parallax scrolling for hero
+- Micro-interactions: hover sounds, button pulses
+
+---
+
+### 7. ⚙️ Performance & Accessibility
+- Optimized image loading (WebP, SVG for patterns)
+- Dark mode as default
+- Use `aria-labels` for screen readers
+- Contrast-compliant colors
+
+---
+
+### 🧿 Final Note
+The website should feel like a **digital Moroccan souk for gamers** – mysterious, modern, and magical. It’s not just a store, it’s a **portal**.
+
+> "Built in Morocco. Designed for Gamers."
+
+---
+

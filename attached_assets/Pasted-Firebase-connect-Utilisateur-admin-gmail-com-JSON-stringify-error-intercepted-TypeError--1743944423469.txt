@@ -1,0 +1,19 @@
+Firebase connecté ✅ - Utilisateur: admin@gmail.com
+JSON.stringify error intercepted: 
+TypeError {}
+[2025-04-06T13:00:09.107Z]  @firebase/firestore: Firestore (11.6.0): WebChannelConnection RPC 'Listen' stream 0x458533aa transport errored: {"type":"c","target":{"s":false,"l":"https://firestore.googleapis.com/google.firestore.v1.Firestore/Listen/channel","v":true,"u":true},"g":{"s":false,"l":"https://firestore.googleapis.com/google.firestore.v1.Firestore/Listen/channel","v":true,"u":true},"defaultPrevented":false,"status":1}
+JSON.stringify error intercepted: 
+TypeError {}
+[2025-04-06T13:00:09.205Z]  @firebase/firestore: Firestore (11.6.0): WebChannelConnection RPC 'Listen' stream 0x458533ab transport errored: {"type":"c","target":{"s":false,"l":"https://firestore.googleapis.com/google.firestore.v1.Firestore/Listen/channel","v":true,"u":true},"g":{"s":false,"l":"https://firestore.googleapis.com/google.firestore.v1.Firestore/Listen/channel","v":true,"u":true},"defaultPrevented":false,"status":1}
+JSON.stringify error intercepted: 
+TypeError {}
+[2025-04-06T13:00:10.582Z]  @firebase/firestore: Firestore (11.6.0): WebChannelConnection RPC 'Listen' stream 0x458533ac transport errored: {"type":"c","target":{"s":false,"l":"https://firestore.googleapis.com/google.firestore.v1.Firestore/Listen/channel","v":true,"u":true},"g":{"s":false,"l":"https://firestore.googleapis.com/google.firestore.v1.Firestore/Listen/channel","v":true,"u":true},"defaultPrevented":false,"status":1}
+JSON.stringify error intercepted: 
+TypeError {}
+[2025-04-06T13:00:12.807Z]  @firebase/firestore: Firestore (11.6.0): WebChannelConnection RPC 'Listen' stream 0x458533ad transport errored: {"type":"c","target":{"s":false,"l":"https://firestore.googleapis.com/google.firestore.v1.Firestore/Listen/channel","v":true,"u":true},"g":{"s":false,"l":"https://firestore.googleapis.com/google.firestore.v1.Firestore/Listen/channel","v":true,"u":true},"defaultPrevented":false,"status":1}
+JSON.stringify error intercepted: 
+TypeError {}
+[2025-04-06T13:00:13.943Z]  @firebase/firestore: Firestore (11.6.0): WebChannelConnection RPC 'Listen' stream 0x458533ae transport errored: {"type":"c","target":{"s":false,"l":"https://firestore.googleapis.com/google.firestore.v1.Firestore/Listen/channel","v":true,"u":true},"g":{"s":false,"l":"https://firestore.googleapis.com/google.firestore.v1.Firestore/Listen/channel","v":true,"u":true},"defaultPrevented":false,"status":1}
+JSON.stringify error intercepted: 
+TypeError {}
+[2025-04-06T13:00:16.594Z]  @firebase/firestore: Firestore (11.6.0): WebChannelConnection RPC 'Listen' stream 0x458533af transport errored: {"type":"c","target":{"s":false,"l":"https://firestore.googleapis.com/google.firestore.v1.Firestore/Listen/channel","v":true,"u":true},"g":{"s":false,"l":"https://firestore.googleapis.com/google.firestore.v1.Firestore/Listen/channel","v":true,"u":true},"defaultPrevented":false,"status":1}

@@ -1,0 +1,1767 @@
+import { useState, useEffect } from "react";
+import { useAuth } from "@/hooks/useAuth";
+import { useLocation } from "wouter";
+import { useToast } from "@/hooks/use-toast";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import { 
+  createUserWithEmailAndPassword, 
+  signInWithEmailAndPassword, 
+  getIdToken,
+  deleteUser
+} from "firebase/auth";
+import { 
+  collection, 
+  doc, 
+  updateDoc, 
+  deleteDoc, 
+  getDocs, 
+  query, 
+  orderBy
+} from "firebase/firestore";
+import { auth, db } from "@/lib/firebase";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import * as z from "zod";
+import { FaEdit, FaTrash, FaSearch, FaUserPlus, FaGoogle, FaFirefoxBrowser } from "react-icons/fa";
+import { FaFireFlameCurved } from "react-icons/fa6";
+import { useLanguage } from "@/hooks/useLanguage";
+import AdminLayout from "@/components/Admin/Layout";
+import ComingSoon from "@/components/ComingSoon";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+
+import firebaseUserService, { 
+  FirebaseUser, 
+  CreateUserData, 
+  UpdateUserData 
+} from "@/lib/firebaseUserService";
+import firestoreUserService from "@/lib/firestoreUserService";
+
+// Type for User from the API
+interface User {
+  id: number;
+  username: string;
+  email: string;
+  role: string;
+  firstName: string | null;
+  lastName: string | null;
+  phoneNumber: string | null;
+  createdAt: string;
+}
+
+const userSchema = z.object({
+  username: z.string().min(3, "Username must be at least 3 characters"),
+  email: z.string().email("Invalid email address"),
+  password: z.string().optional(),
+  firstName: z.string().optional().nullable(),
+  lastName: z.string().optional().nullable(),
+  phoneNumber: z.string().optional().nullable(),
+  role: z.string(),
+});
+
+// Interface pour les données Firestore utilisateur
+// Importer UserRole de firestoreUserService
+import { UserRole, UserPreferences, ActivityLogEntry } from "@/lib/firestoreUserService";
+
+interface FirebaseUserData {
+  uid: string;
+  username: string;
+  email: string;
+  firstName: string | null;
+  lastName: string | null;
+  phoneNumber: string | null;
+  city: string | null;
+  walletBalance: number;
+  isAdmin?: boolean;
+  roles?: UserRole[];
+  isSuspended?: boolean;
+  suspensionReason?: string | null;
+  suspendedUntil?: Date | null;
+  lastLogin?: Date | null;
+  userPreferences?: UserPreferences;
+  activityLogs?: ActivityLogEntry[];
+  createdAt?: any;
+  updatedAt?: any;
+  docId?: string;
+}
+
+const AdminUsersPage = () => {
+  const { translate } = useLanguage();
+  const { isAdmin, user } = useAuth();
+  const [, navigate] = useLocation();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [activeTab, setActiveTab] = useState<string>("platform"); // "platform" ou "firebase"
+  
+  // État pour les utilisateurs Firebase
+  const [firebaseUsers, setFirebaseUsers] = useState<FirebaseUser[]>([]);
+  const [isLoadingFirebase, setIsLoadingFirebase] = useState(false);
+  // État pour les utilisateurs Firestore
+  const [firestoreUsers, setFirestoreUsers] = useState<FirebaseUserData[]>([]);
+  const [isLoadingFirestoreUsers, setIsLoadingFirestoreUsers] = useState(false);
+  const [firestoreError, setFirestoreError] = useState<string | null>(null);
+  const [selectedFirestoreUser, setSelectedFirestoreUser] = useState<FirebaseUserData | null>(null);
+  const [isEditFirestoreModalOpen, setIsEditFirestoreModalOpen] = useState(false);
+  
+  // État pour le formulaire Firebase
+  const [firebaseEmail, setFirebaseEmail] = useState("");
+  const [firebasePassword, setFirebasePassword] = useState("");
+  const [isCreatingFirebaseUser, setIsCreatingFirebaseUser] = useState(false);
+  
+  // État pour le formulaire Firebase complet
+  const [firebaseUsername, setFirebaseUsername] = useState("");
+  const [firebaseFirstName, setFirebaseFirstName] = useState("");
+  const [firebaseLastName, setFirebaseLastName] = useState("");
+  const [firebasePhone, setFirebasePhone] = useState("");
+  const [firebaseCity, setFirebaseCity] = useState("");
+  const [firebaseWalletBalance, setFirebaseWalletBalance] = useState(0);
+  const [firebaseIsAdmin, setFirebaseIsAdmin] = useState(false);
+  
+  // État pour les rôles et les suspensions
+  const [firebaseRoles, setFirebaseRoles] = useState<UserRole[]>(['customer']);
+  const [firebaseIsSuspended, setFirebaseIsSuspended] = useState(false);
+  const [firebaseSuspensionReason, setFirebaseSuspensionReason] = useState("");
+  const [firebaseSuspensionDuration, setFirebaseSuspensionDuration] = useState<number | null>(null);
+  
+  // État pour la gestion des onglets dans le modal d'édition
+  const [activeUserTab, setActiveUserTab] = useState("general"); // general, roles, suspension
+
+  // Redirect if not admin
+  useEffect(() => {
+    if (user === null) {
+      navigate("/auth");
+      return;
+    }
+
+    if (!isAdmin) {
+      navigate("/");
+      toast({
+        title: "Access Denied",
+        description: "You do not have permission to access the admin area.",
+        variant: "destructive",
+      });
+    }
+  }, [isAdmin, navigate, toast, user]);
+  
+  // Fonction pour créer un utilisateur Firebase de base (seulement Auth)
+  const createFirebaseUser = async (email: string, password: string) => {
+    if (!email || !password) {
+      toast({
+        title: "Error",
+        description: "Email and password are required",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    try {
+      setIsCreatingFirebaseUser(true);
+      // Créer l'utilisateur dans Firebase
+      await createUserWithEmailAndPassword(auth, email, password);
+      
+      toast({
+        title: "Success",
+        description: `Firebase user ${email} created successfully`,
+        variant: "default",
+      });
+      
+      // Réinitialiser le formulaire
+      setFirebaseEmail("");
+      setFirebasePassword("");
+      
+      // Actualiser la liste des utilisateurs Firestore
+      fetchFirestoreUsers();
+      
+    } catch (error: any) {
+      console.error("Error creating Firebase user:", error);
+      let errorMessage = "Failed to create user";
+      
+      // Messages d'erreur spécifiques
+      if (error.code === "auth/email-already-in-use") {
+        errorMessage = "This email is already in use";
+      } else if (error.code === "auth/invalid-email") {
+        errorMessage = "Invalid email format";
+      } else if (error.code === "auth/weak-password") {
+        errorMessage = "Password is too weak (min 6 characters)";
+      }
+      
+      toast({
+        title: "Error",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      setIsCreatingFirebaseUser(false);
+    }
+  };
+  
+  // Fonction pour créer un utilisateur Firebase complet avec données Firestore
+  const createCompleteFirebaseUser = async () => {
+    if (!firebaseEmail || !firebasePassword || !firebaseUsername) {
+      toast({
+        title: "Error",
+        description: "Email, mot de passe et nom d'utilisateur sont requis",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    try {
+      setIsCreatingFirebaseUser(true);
+      
+      // Créer l'utilisateur Auth via méthode standard de Firebase
+      const userCredential = await createUserWithEmailAndPassword(auth, firebaseEmail, firebasePassword);
+      const newUser = userCredential.user;
+      
+      if (!newUser || !newUser.uid) {
+        throw new Error("Échec de la création de l'utilisateur Firebase");
+      }
+      
+      // Créer le document Firestore pour l'utilisateur
+      await firestoreUserService.createUser({
+        uid: newUser.uid,
+        username: firebaseUsername,
+        email: firebaseEmail,
+        firstName: firebaseFirstName || null,
+        lastName: firebaseLastName || null,
+        phoneNumber: firebasePhone || null,
+        city: firebaseCity || null,
+        walletBalance: firebaseWalletBalance,
+        isAdmin: firebaseIsAdmin
+      });
+      
+      toast({
+        title: "Succès",
+        description: `Utilisateur Firebase ${firebaseUsername} créé avec succès`,
+        variant: "default",
+      });
+      
+      // Réinitialiser le formulaire
+      setFirebaseEmail("");
+      setFirebasePassword("");
+      setFirebaseUsername("");
+      setFirebaseFirstName("");
+      setFirebaseLastName("");
+      setFirebasePhone("");
+      setFirebaseCity("");
+      setFirebaseWalletBalance(0);
+      setFirebaseIsAdmin(false);
+      
+      // Actualiser la liste des utilisateurs Firestore
+      fetchFirestoreUsers();
+      
+    } catch (error: any) {
+      console.error("Error creating complete Firebase user:", error);
+      let errorMessage = "Échec de la création de l'utilisateur";
+      
+      if (error.code === "auth/email-already-in-use") {
+        errorMessage = "Cette adresse email est déjà utilisée";
+      } else if (error.code === "auth/invalid-email") {
+        errorMessage = "Format d'email invalide";
+      } else if (error.code === "auth/weak-password") {
+        errorMessage = "Mot de passe trop faible (min 6 caractères)";
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      toast({
+        title: "Erreur",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      setIsCreatingFirebaseUser(false);
+    }
+  };
+  
+  // Fonction pour récupérer les utilisateurs depuis Firestore
+  const fetchFirestoreUsers = async () => {
+    try {
+      setIsLoadingFirestoreUsers(true);
+      setFirestoreError(null);
+      
+      console.log("Tentative de récupération des utilisateurs Firestore...");
+      
+      // Utiliser le service dédié pour récupérer les utilisateurs Firestore
+      try {
+        // Récupérer les utilisateurs avec le service
+        const users = await firestoreUserService.getAllUsers();
+        
+        // Convertir au format attendu par le composant
+        const formattedUsers: FirebaseUserData[] = users.map(user => ({
+          uid: user.uid,
+          username: user.username,
+          email: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          phoneNumber: user.phoneNumber,
+          city: user.city,
+          walletBalance: user.walletBalance,
+          isAdmin: user.isAdmin || false,
+          roles: user.roles || ['customer'],
+          isSuspended: user.isSuspended || false,
+          suspensionReason: user.suspensionReason || null,
+          suspendedUntil: user.suspendedUntil || null,
+          lastLogin: user.lastLogin || null,
+          userPreferences: user.userPreferences,
+          activityLogs: user.activityLogs || [],
+          createdAt: user.createdAt,
+          updatedAt: user.updatedAt,
+          docId: user.docId
+        }));
+        
+        setFirestoreUsers(formattedUsers);
+        
+        if (formattedUsers.length === 0) {
+          console.log("Aucun utilisateur trouvé dans Firestore");
+        } else {
+          console.log(`${formattedUsers.length} utilisateurs trouvés dans Firestore`);
+        }
+      } catch (firestoreError: any) {
+        console.error("Erreur spécifique Firestore:", firestoreError);
+        setFirestoreError(`Erreur Firestore: ${firestoreError.message}`);
+      }
+    } catch (error: any) {
+      console.error("Error fetching Firestore users:", error);
+      setFirestoreError(error.message || "Impossible de récupérer les utilisateurs");
+    } finally {
+      setIsLoadingFirestoreUsers(false);
+    }
+  };
+
+  // Fonction pour récupérer les utilisateurs Firebase (via l'API Admin)
+  const fetchFirebaseUsers = async () => {
+    try {
+      setIsLoadingFirebase(true);
+      
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        throw new Error("Vous devez être connecté pour effectuer cette action");
+      }
+      
+      const token = await getIdToken(currentUser);
+      const response = await firebaseUserService.getAllUsers(token);
+      
+      // Assurez-vous que nous recevons un tableau d'utilisateurs
+      if (response && Array.isArray(response.users)) {
+        setFirebaseUsers(response.users);
+      } else if (response && response.users) {
+        setFirebaseUsers(response.users);
+      } else {
+        // Fallback si le format n'est pas celui attendu
+        setFirebaseUsers([]);
+        console.error("Format de réponse inattendu:", response);
+      }
+    } catch (error: any) {
+      console.error("Error fetching Firebase users:", error);
+      toast({
+        title: "Erreur",
+        description: error.message || "Impossible de récupérer les utilisateurs Firebase",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingFirebase(false);
+    }
+  };
+  
+  // Fonction pour éditer un utilisateur Firestore
+  const handleEditFirestoreUser = (user: FirebaseUserData) => {
+    setSelectedFirestoreUser(user);
+    setFirebaseEmail(user.email);
+    setFirebaseUsername(user.username);
+    setFirebaseFirstName(user.firstName || "");
+    setFirebaseLastName(user.lastName || "");
+    setFirebasePhone(user.phoneNumber || "");
+    setFirebaseCity(user.city || "");
+    setFirebaseWalletBalance(user.walletBalance);
+    setFirebaseIsAdmin(user.isAdmin || false);
+    
+    // Initialiser les états pour les rôles et suspensions
+    setFirebaseRoles(user.roles || ['customer']);
+    setFirebaseIsSuspended(user.isSuspended || false);
+    setFirebaseSuspensionReason(user.suspensionReason || "");
+    
+    // Calculer la durée de suspension si la date de fin est définie
+    if (user.suspendedUntil) {
+      const now = new Date();
+      const endDate = new Date(user.suspendedUntil);
+      const diffDays = Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 3600 * 24));
+      setFirebaseSuspensionDuration(diffDays > 0 ? diffDays : null);
+    } else {
+      setFirebaseSuspensionDuration(null);
+    }
+    
+    // Réinitialiser l'onglet actif
+    setActiveUserTab("general");
+    
+    // Ouvrir la modal d'édition
+    setIsEditFirestoreModalOpen(true);
+  };
+  
+  // Fonction pour mettre à jour un utilisateur Firestore
+  const updateFirestoreUser = async () => {
+    if (!selectedFirestoreUser) return;
+    
+    try {
+      // Données de base de l'utilisateur
+      const updatedUserData = {
+        username: firebaseUsername,
+        email: firebaseEmail,
+        firstName: firebaseFirstName || null,
+        lastName: firebaseLastName || null,
+        phoneNumber: firebasePhone || null,
+        city: firebaseCity || null,
+        walletBalance: firebaseWalletBalance,
+        isAdmin: firebaseIsAdmin,
+        roles: firebaseRoles
+      };
+      
+      // Utiliser le service pour mettre à jour l'utilisateur
+      await firestoreUserService.updateUser(selectedFirestoreUser.uid, updatedUserData);
+      
+      // Gérer la suspension séparément
+      if (firebaseIsSuspended && !selectedFirestoreUser.isSuspended) {
+        // Suspendre l'utilisateur s'il ne l'était pas déjà
+        await firestoreUserService.suspendUser(
+          selectedFirestoreUser.uid, 
+          firebaseSuspensionReason, 
+          firebaseSuspensionDuration || undefined
+        );
+      } else if (!firebaseIsSuspended && selectedFirestoreUser.isSuspended) {
+        // Réactiver l'utilisateur s'il était suspendu
+        await firestoreUserService.unsuspendUser(selectedFirestoreUser.uid);
+      } else if (firebaseIsSuspended && selectedFirestoreUser.isSuspended) {
+        // Mettre à jour les détails de suspension
+        if (firebaseSuspensionReason !== selectedFirestoreUser.suspensionReason || 
+            firebaseSuspensionDuration !== null) {
+          // Suspendre à nouveau avec les nouvelles informations
+          await firestoreUserService.suspendUser(
+            selectedFirestoreUser.uid, 
+            firebaseSuspensionReason, 
+            firebaseSuspensionDuration || undefined
+          );
+        }
+      }
+      
+      // Mettre à jour les rôles de l'utilisateur si nécessaire
+      if (JSON.stringify(firebaseRoles) !== JSON.stringify(selectedFirestoreUser.roles)) {
+        await firestoreUserService.updateUserRoles(selectedFirestoreUser.uid, firebaseRoles);
+      }
+      
+      toast({
+        title: "Succès",
+        description: "Utilisateur mis à jour avec succès",
+      });
+      
+      setIsEditFirestoreModalOpen(false);
+      fetchFirestoreUsers();
+      
+    } catch (error: any) {
+      console.error("Error updating Firestore user:", error);
+      toast({
+        title: "Erreur",
+        description: error.message || "Échec de la mise à jour de l'utilisateur",
+        variant: "destructive",
+      });
+    }
+  };
+  
+  // Fonction pour supprimer un utilisateur Firestore
+  const handleDeleteFirestoreUser = async (user: FirebaseUserData) => {
+    if (!window.confirm(`Êtes-vous sûr de vouloir supprimer l'utilisateur ${user.username} ?`)) {
+      return;
+    }
+    
+    try {
+      // Utiliser le service pour supprimer l'utilisateur Firestore
+      await firestoreUserService.deleteUser(user.uid);
+      
+      toast({
+        title: "Succès",
+        description: "Utilisateur supprimé avec succès",
+      });
+      
+      fetchFirestoreUsers();
+      
+    } catch (error: any) {
+      console.error("Error deleting Firestore user:", error);
+      
+      toast({
+        title: "Erreur",
+        description: error.message || "Échec de la suppression de l'utilisateur",
+        variant: "destructive",
+      });
+    }
+  };
+  
+  // Charger les utilisateurs Firestore au chargement de l'onglet Firebase
+  useEffect(() => {
+    if (activeTab === "firebase") {
+      // Ajouter un petit délai pour éviter les problèmes de concurrence
+      const timer = setTimeout(() => {
+        console.log("Tentative de chargement des utilisateurs Firestore (avec délai)...");
+        fetchFirestoreUsers();
+      }, 1000);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [activeTab]);
+
+  // Form for editing users
+  const form = useForm<z.infer<typeof userSchema>>({
+    resolver: zodResolver(userSchema),
+    defaultValues: {
+      username: "",
+      email: "",
+      password: "",
+      firstName: "",
+      lastName: "",
+      phoneNumber: "",
+      role: "customer",
+    },
+  });
+
+  // Fetch users
+  const { data: users = [], isLoading } = useQuery({
+    queryKey: ["/api/users"],
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/users");
+      const data = await response.json();
+      return data as User[];
+    },
+  });
+
+  // Filtered users based on search term
+  const filteredUsers = users.filter(
+    (user) =>
+      user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (user.firstName &&
+        user.firstName.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (user.lastName &&
+        user.lastName.toLowerCase().includes(searchTerm.toLowerCase())),
+  );
+
+  // Update user mutation
+  const updateUserMutation = useMutation({
+    mutationFn: async (
+      userData: z.infer<typeof userSchema> & { id: number },
+    ) => {
+      const { id, ...rest } = userData;
+      // Add flag for admin request (security on the backend)
+      const payload = { ...rest, adminRequest: true };
+
+      const response = await apiRequest("PUT", `/api/users/${id}`, payload);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      toast({
+        title: "Success",
+        description: "User has been updated.",
+      });
+      setIsEditModalOpen(false);
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: `Failed to update user: ${error.message}`,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Delete user mutation
+  const deleteUserMutation = useMutation({
+    mutationFn: async (id: number) => {
+      await apiRequest("DELETE", `/api/users/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      toast({
+        title: "Success",
+        description: "User has been deleted.",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: `Failed to delete user: ${error.message}`,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Handle opening edit modal
+  const handleEditUser = (user: User) => {
+    setSelectedUser(user);
+    form.reset({
+      username: user.username,
+      email: user.email,
+      password: "", // Don't include password in edit form
+      firstName: user.firstName,
+      lastName: user.lastName,
+      phoneNumber: user.phoneNumber,
+      role: user.role,
+    });
+    setIsEditModalOpen(true);
+  };
+
+  // Handle delete user
+  const handleDeleteUser = (id: number) => {
+    if (window.confirm("Are you sure you want to delete this user?")) {
+      deleteUserMutation.mutate(id);
+    }
+  };
+
+  // Handle form submission
+  const onSubmit = async (values: z.infer<typeof userSchema>) => {
+    // Create a clean data object
+    const userData: any = { ...values };
+
+    // Add flag for admin requests to bypass role protection in API
+    userData.adminRequest = true;
+
+    try {
+      if (selectedUser) {
+        // Update existing user
+        // If password is empty, remove it from the request
+        if (userData.password === "") {
+          delete userData.password;
+        }
+        updateUserMutation.mutate({ ...userData, id: selectedUser.id });
+      } else {
+        // Create new user
+        // For new users, password is required
+        if (!userData.password) {
+          toast({
+            title: "Error",
+            description: "Password is required for new users.",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        // Create user via the registration endpoint
+        const response = await fetch("/api/auth/register", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(userData),
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.message || "Failed to create user");
+        }
+
+        queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+
+        toast({
+          title: "Success",
+          description: "User created successfully.",
+        });
+
+        setIsEditModalOpen(false);
+      }
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to process user data.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-[#0a0f1a] text-white flex items-center justify-center">
+        <div className="animate-spin rounded-full h-32 w-32 border-t-2 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  return (
+    <AdminLayout>
+      <div className="container mx-auto px-4 py-12">
+        <h1 className="text-3xl font-bold mb-8 text-primary">
+          User Management
+        </h1>
+        
+        {/* Navigation par onglet pour la gestion des utilisateurs */}
+        <Tabs 
+          defaultValue="platform" 
+          className="mb-8"
+          value={activeTab}
+          onValueChange={setActiveTab}
+        >
+          <TabsList className="bg-[#132743] mb-6">
+            <TabsTrigger 
+              value="platform" 
+              className="data-[state=active]:bg-primary data-[state=active]:text-black"
+            >
+              Utilisateurs Plateforme
+            </TabsTrigger>
+            <TabsTrigger 
+              value="firebase" 
+              className="data-[state=active]:bg-primary data-[state=active]:text-black"
+            >
+              <FaFireFlameCurved className="mr-1" /> 
+              Utilisateurs Firebase
+            </TabsTrigger>
+          </TabsList>
+          
+          {/* Contenu de l'onglet Utilisateurs Plateforme */}
+          <TabsContent value="platform">
+            <div className="mb-6 flex justify-between items-center">
+              <div className="relative w-64">
+                <FaSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                <Input
+                  type="text"
+                  placeholder="Search users..."
+                  className="pl-10 bg-[#132743] border-[#B8860B] text-white"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
+
+              <Button
+                onClick={() => {
+                  setSelectedUser(null);
+                  form.reset({
+                    username: "",
+                    email: "",
+                    password: "",
+                    firstName: "",
+                    lastName: "",
+                    phoneNumber: "",
+                    role: "customer",
+                  });
+                  setIsEditModalOpen(true);
+                }}
+                className="bg-primary hover:bg-primary/80 text-background"
+              >
+                <FaUserPlus className="mr-2" />
+                Add New User
+              </Button>
+            </div>
+
+            <div className="bg-[#132743] rounded-lg shadow-lg overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-b border-[#B8860B]/30">
+                    <TableHead className="text-primary">ID</TableHead>
+                    <TableHead className="text-primary">Username</TableHead>
+                    <TableHead className="text-primary">Email</TableHead>
+                    <TableHead className="text-primary">Full Name</TableHead>
+                    <TableHead className="text-primary">Role</TableHead>
+                    <TableHead className="text-primary">Registered</TableHead>
+                    <TableHead className="text-primary">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredUsers.length > 0 ? (
+                    filteredUsers.map((user) => (
+                      <TableRow
+                        key={user.id}
+                        className="border-b border-[#B8860B]/20 hover:bg-[#0a0f1a]/30"
+                      >
+                        <TableCell>{user.id}</TableCell>
+                        <TableCell>{user.username}</TableCell>
+                        <TableCell>{user.email}</TableCell>
+                        <TableCell>
+                          {user.firstName} {user.lastName}
+                        </TableCell>
+                        <TableCell>
+                          <span
+                            className={`px-2 py-1 rounded-full text-xs ${
+                              user.role === "admin"
+                                ? "bg-red-900/50 text-red-200"
+                                : "bg-green-900/50 text-green-200"
+                            }`}
+                          >
+                            {user.role}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          {new Date(user.createdAt).toLocaleDateString()}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-primary hover:text-primary/80 hover:bg-[#B8860B]/10"
+                              onClick={() => handleEditUser(user)}
+                            >
+                              <FaEdit />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-[#E63946] hover:text-[#E63946]/80 hover:bg-[#E63946]/10"
+                              onClick={() => handleDeleteUser(user.id)}
+                              disabled={user.role === "admin"} // Prevent deleting admins
+                            >
+                              <FaTrash />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center py-4">
+                        No users found matching your search.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </TabsContent>
+          
+          {/* Contenu de l'onglet Utilisateurs Firebase */}
+          <TabsContent value="firebase">
+            <div className="mb-8 bg-[#132743] rounded-lg p-6 shadow-lg border border-[#B8860B]/20">
+              <h2 className="text-xl font-bold mb-4 text-primary flex items-center">
+                <FaFireFlameCurved className="mr-2" /> 
+                Créer un Utilisateur Firebase
+              </h2>
+              <p className="text-gray-300 mb-6">
+                Créez un nouvel utilisateur Firebase complet avec toutes les données requises.
+              </p>
+              
+              {/* Formulaire de création d'utilisateur Firebase complet */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">
+                    Email *
+                  </label>
+                  <Input
+                    type="email"
+                    value={firebaseEmail}
+                    onChange={(e) => setFirebaseEmail(e.target.value)}
+                    className="bg-[#0a0f1a] border-[#B8860B] text-white w-full"
+                    placeholder="email@example.com"
+                    required
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">
+                    Mot de passe *
+                  </label>
+                  <Input
+                    type="password"
+                    value={firebasePassword}
+                    onChange={(e) => setFirebasePassword(e.target.value)}
+                    className="bg-[#0a0f1a] border-[#B8860B] text-white w-full"
+                    placeholder="Minimum 6 caractères"
+                    required
+                  />
+                </div>
+
+                {/* Champs additionnels pour le profil utilisateur */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">
+                    Nom d'utilisateur *
+                  </label>
+                  <Input
+                    type="text"
+                    value={firebaseUsername}
+                    onChange={(e) => setFirebaseUsername(e.target.value)}
+                    className="bg-[#0a0f1a] border-[#B8860B] text-white w-full"
+                    placeholder="username"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">
+                    Prénom
+                  </label>
+                  <Input
+                    type="text"
+                    value={firebaseFirstName}
+                    onChange={(e) => setFirebaseFirstName(e.target.value)}
+                    className="bg-[#0a0f1a] border-[#B8860B] text-white w-full"
+                    placeholder="Prénom"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">
+                    Nom
+                  </label>
+                  <Input
+                    type="text"
+                    value={firebaseLastName}
+                    onChange={(e) => setFirebaseLastName(e.target.value)}
+                    className="bg-[#0a0f1a] border-[#B8860B] text-white w-full"
+                    placeholder="Nom"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">
+                    Téléphone
+                  </label>
+                  <Input
+                    type="tel"
+                    value={firebasePhone}
+                    onChange={(e) => setFirebasePhone(e.target.value)}
+                    className="bg-[#0a0f1a] border-[#B8860B] text-white w-full"
+                    placeholder="+212XXXXXXXXX"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">
+                    Ville
+                  </label>
+                  <Input
+                    type="text"
+                    value={firebaseCity}
+                    onChange={(e) => setFirebaseCity(e.target.value)}
+                    className="bg-[#0a0f1a] border-[#B8860B] text-white w-full"
+                    placeholder="Ville"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">
+                    Solde du portefeuille
+                  </label>
+                  <Input
+                    type="number"
+                    value={firebaseWalletBalance}
+                    onChange={(e) => setFirebaseWalletBalance(Number(e.target.value))}
+                    className="bg-[#0a0f1a] border-[#B8860B] text-white w-full"
+                    placeholder="0"
+                    min="0"
+                  />
+                </div>
+
+                <div className="flex items-center mt-4">
+                  <Checkbox 
+                    id="firebase-admin" 
+                    checked={firebaseIsAdmin}
+                    onCheckedChange={(checked) => setFirebaseIsAdmin(checked as boolean)}
+                    className="border-[#B8860B] data-[state=checked]:bg-primary"
+                  />
+                  <label htmlFor="firebase-admin" className="ml-2 text-sm font-medium text-gray-300">
+                    Utilisateur administrateur
+                  </label>
+                </div>
+              </div>
+              
+              <Button
+                onClick={createCompleteFirebaseUser}
+                disabled={isCreatingFirebaseUser || !firebaseEmail || !firebasePassword || !firebaseUsername}
+                className="bg-primary hover:bg-primary/80 text-background mt-4"
+              >
+                {isCreatingFirebaseUser ? (
+                  <>
+                    <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-background border-r-transparent"></div>
+                    Création en cours...
+                  </>
+                ) : (
+                  <>
+                    <FaUserPlus className="mr-2" />
+                    Créer Utilisateur Firebase
+                  </>
+                )}
+              </Button>
+            </div>
+            
+            {/* Liste des utilisateurs Firebase provenant de Firestore */}
+            <div className="mb-4">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-bold text-primary">
+                  Utilisateurs Firebase
+                </h2>
+                <Button
+                  onClick={fetchFirestoreUsers}
+                  variant="outline"
+                  className="border-[#B8860B] text-primary hover:bg-[#B8860B]/10"
+                  disabled={isLoadingFirestoreUsers}
+                >
+                  {isLoadingFirestoreUsers ? (
+                    <>
+                      <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-primary border-r-transparent"></div>
+                      Chargement...
+                    </>
+                  ) : (
+                    <>
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      Actualiser
+                    </>
+                  )}
+                </Button>
+              </div>
+              
+              {firestoreError ? (
+                <div className="bg-red-900/30 border border-red-800 rounded-lg p-4 mb-6">
+                  <h3 className="text-red-400 font-semibold mb-2 flex items-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                    </svg>
+                    Erreur de connexion à Firestore
+                  </h3>
+                  <p className="text-gray-300 text-sm">
+                    {firestoreError}
+                  </p>
+                  <div className="mt-4">
+                    <Button 
+                      variant="destructive" 
+                      className="text-sm"
+                      onClick={() => setFirestoreError(null)}
+                    >
+                      Fermer
+                    </Button>
+                  </div>
+                </div>
+              ) : isLoadingFirestoreUsers ? (
+                <div className="bg-[#132743] rounded-lg p-12 shadow-lg flex justify-center">
+                  <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+                </div>
+              ) : firestoreUsers.length > 0 ? (
+                <div className="bg-[#132743] rounded-lg shadow-lg overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="border-b border-[#B8860B]/30">
+                        <TableHead className="text-primary">UID</TableHead>
+                        <TableHead className="text-primary">Username</TableHead>
+                        <TableHead className="text-primary">Email</TableHead>
+                        <TableHead className="text-primary">Nom complet</TableHead>
+                        <TableHead className="text-primary">Solde</TableHead>
+                        <TableHead className="text-primary">Rôle</TableHead>
+                        <TableHead className="text-primary">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {firestoreUsers.map((user) => (
+                        <TableRow key={user.uid} className="border-b border-[#B8860B]/20 hover:bg-[#0a0f1a]/30">
+                          <TableCell className="font-mono text-xs text-gray-400">{user.uid.substring(0, 8)}...</TableCell>
+                          <TableCell>{user.username}</TableCell>
+                          <TableCell>{user.email}</TableCell>
+                          <TableCell>
+                            {user.firstName} {user.lastName}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="bg-green-900/30 text-green-300 border-green-700">
+                              {user.walletBalance} DH
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <span className={`px-2 py-1 rounded-full text-xs ${
+                              user.isAdmin
+                                ? "bg-red-900/50 text-red-200"
+                                : "bg-green-900/50 text-green-200"
+                            }`}>
+                              {user.isAdmin ? "admin" : "client"}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="text-primary hover:text-primary/80 hover:bg-[#B8860B]/10"
+                                onClick={() => handleEditFirestoreUser(user)}
+                              >
+                                <FaEdit />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="text-[#E63946] hover:text-[#E63946]/80 hover:bg-[#E63946]/10"
+                                onClick={() => handleDeleteFirestoreUser(user)}
+                              >
+                                <FaTrash />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
+                <div className="bg-[#132743] rounded-lg p-8 shadow-lg text-center">
+                  <div className="text-gray-400 mb-4">
+                    <FaFireFlameCurved className="w-12 h-12 mx-auto opacity-30" />
+                  </div>
+                  <h3 className="text-lg font-medium text-gray-300 mb-2">Aucun utilisateur trouvé</h3>
+                  <p className="text-gray-400 mb-4">Aucun utilisateur n'a été trouvé dans Firestore. Créez-en un ou actualisez la liste.</p>
+                  <Button
+                    variant="outline"
+                    className="border-[#B8860B] text-primary hover:bg-[#B8860B]/10"
+                    onClick={fetchFirestoreUsers}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    Actualiser
+                  </Button>
+                </div>
+              )}
+              
+              {/* Information sur la console Firebase */}
+              <div className="bg-[#1F2937] border border-yellow-600/20 rounded-lg p-4 mt-6">
+                <h3 className="text-yellow-400 font-semibold mb-2 flex items-center">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                  </svg>
+                  Gestion avancée des utilisateurs
+                </h3>
+                <p className="text-gray-300 text-sm">
+                  Pour une gestion plus avancée des utilisateurs, notamment la réinitialisation des mots de passe ou la modification des emails,
+                  veuillez utiliser la <a href="https://console.firebase.google.com/" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">console Firebase</a>.
+                </p>
+                
+                <h3 className="font-semibold text-sm mt-3 mb-1 text-yellow-400">Comment accéder à la console Firebase :</h3>
+                <ol className="list-decimal pl-5 space-y-1 text-gray-300 text-xs">
+                  <li>Accédez à la <a href="https://console.firebase.google.com/" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">console Firebase</a></li>
+                  <li>Sélectionnez votre projet</li>
+                  <li>Dans le menu de gauche, cliquez sur "Authentication"</li>
+                  <li>Allez dans l'onglet "Users" pour voir la liste complète</li>
+                </ol>
+              </div>
+            </div>
+          </TabsContent>
+        </Tabs>
+      </div>
+
+      {/* User Form Modal */}
+      <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
+        <DialogContent className="bg-[#132743] text-white border-[#B8860B]">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold text-primary">
+              {selectedUser ? "Edit User" : "Add New User"}
+            </DialogTitle>
+            <DialogDescription className="text-gray-400">
+              {selectedUser
+                ? "Make changes to the user's information here."
+                : "Fill in the information to create a new user."}
+            </DialogDescription>
+          </DialogHeader>
+
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              <FormField
+                control={form.control}
+                name="username"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-white">Username</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        className="bg-[#0a0f1a] border-[#B8860B] text-white"
+                      />
+                    </FormControl>
+                    <FormMessage className="text-[#E63946]" />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-white">Email</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        className="bg-[#0a0f1a] border-[#B8860B] text-white"
+                      />
+                    </FormControl>
+                    <FormMessage className="text-[#E63946]" />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="password"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-white">
+                      Password{" "}
+                      <span className="text-gray-400 text-sm">
+                        (Leave empty to keep current)
+                      </span>
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        type="password"
+                        className="bg-[#0a0f1a] border-[#B8860B] text-white"
+                      />
+                    </FormControl>
+                    <FormMessage className="text-[#E63946]" />
+                  </FormItem>
+                )}
+              />
+
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="firstName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-white">First Name</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          value={field.value || ""}
+                          className="bg-[#0a0f1a] border-[#B8860B] text-white"
+                        />
+                      </FormControl>
+                      <FormMessage className="text-[#E63946]" />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="lastName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-white">Last Name</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          value={field.value || ""}
+                          className="bg-[#0a0f1a] border-[#B8860B] text-white"
+                        />
+                      </FormControl>
+                      <FormMessage className="text-[#E63946]" />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <FormField
+                control={form.control}
+                name="phoneNumber"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-white">Phone Number</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        value={field.value || ""}
+                        className="bg-[#0a0f1a] border-[#B8860B] text-white"
+                      />
+                    </FormControl>
+                    <FormMessage className="text-[#E63946]" />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="role"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-white">Role</FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      defaultValue={field.value}
+                    >
+                      <FormControl>
+                        <SelectTrigger className="bg-[#0a0f1a] border-[#B8860B] text-white">
+                          <SelectValue placeholder="Select a role" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent className="bg-[#0a0f1a] border-[#B8860B] text-white">
+                        <SelectItem value="customer">Customer</SelectItem>
+                        <SelectItem value="admin">Administrator</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage className="text-[#E63946]" />
+                  </FormItem>
+                )}
+              />
+
+              <DialogFooter className="pt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsEditModalOpen(false)}
+                  className="border-[#B8860B] text-white hover:bg-[#B8860B]/10"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  className="bg-primary hover:bg-primary/80 text-background"
+                  disabled={updateUserMutation.isPending}
+                >
+                  {updateUserMutation.isPending
+                    ? "Saving..."
+                    : selectedUser
+                      ? "Save Changes"
+                      : "Create User"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Firebase User Edit Modal */}
+      <Dialog open={isEditFirestoreModalOpen} onOpenChange={setIsEditFirestoreModalOpen}>
+        <DialogContent className="bg-[#132743] text-white border-[#B8860B] max-w-3xl">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold text-primary flex items-center">
+              <FaFireFlameCurved className="mr-2" />
+              Modifier l'utilisateur Firebase
+            </DialogTitle>
+            <DialogDescription className="text-gray-400">
+              Modifiez les détails, rôles et statut de l'utilisateur Firebase.
+            </DialogDescription>
+          </DialogHeader>
+          
+          {/* Onglets pour l'édition utilisateur */}
+          <Tabs 
+            value={activeUserTab} 
+            onValueChange={setActiveUserTab}
+            className="w-full"
+          >
+            <TabsList className="bg-[#0a0f1a] mb-4 w-full">
+              <TabsTrigger 
+                value="general" 
+                className="flex-1 data-[state=active]:bg-primary data-[state=active]:text-black"
+              >
+                Informations Générales
+              </TabsTrigger>
+              <TabsTrigger 
+                value="roles" 
+                className="flex-1 data-[state=active]:bg-primary data-[state=active]:text-black"
+              >
+                Rôles et Permissions
+              </TabsTrigger>
+              <TabsTrigger 
+                value="suspension" 
+                className="flex-1 data-[state=active]:bg-primary data-[state=active]:text-black"
+              >
+                Suspension
+              </TabsTrigger>
+            </TabsList>
+            
+            {/* Onglet Informations Générales */}
+            <TabsContent value="general" className="space-y-5">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">
+                  Email
+                </label>
+                <Input
+                  type="email"
+                  value={firebaseEmail}
+                  onChange={(e) => setFirebaseEmail(e.target.value)}
+                  className="bg-[#0a0f1a] border-[#B8860B] text-white w-full"
+                  placeholder="email@example.com"
+                  disabled={true} // L'email ne peut pas être modifié via Firestore
+                />
+                <p className="text-xs text-gray-400 mt-1">L'email ne peut pas être modifié ici. Utilisez la console Firebase.</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">
+                  Nom d'utilisateur
+                </label>
+                <Input
+                  type="text"
+                  value={firebaseUsername}
+                  onChange={(e) => setFirebaseUsername(e.target.value)}
+                  className="bg-[#0a0f1a] border-[#B8860B] text-white w-full"
+                  placeholder="username"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">
+                    Prénom
+                  </label>
+                  <Input
+                    type="text"
+                    value={firebaseFirstName}
+                    onChange={(e) => setFirebaseFirstName(e.target.value)}
+                    className="bg-[#0a0f1a] border-[#B8860B] text-white w-full"
+                    placeholder="Prénom"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">
+                    Nom
+                  </label>
+                  <Input
+                    type="text"
+                    value={firebaseLastName}
+                    onChange={(e) => setFirebaseLastName(e.target.value)}
+                    className="bg-[#0a0f1a] border-[#B8860B] text-white w-full"
+                    placeholder="Nom"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">
+                    Téléphone
+                  </label>
+                  <Input
+                    type="tel"
+                    value={firebasePhone}
+                    onChange={(e) => setFirebasePhone(e.target.value)}
+                    className="bg-[#0a0f1a] border-[#B8860B] text-white w-full"
+                    placeholder="+212XXXXXXXXX"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">
+                    Ville
+                  </label>
+                  <Input
+                    type="text"
+                    value={firebaseCity}
+                    onChange={(e) => setFirebaseCity(e.target.value)}
+                    className="bg-[#0a0f1a] border-[#B8860B] text-white w-full"
+                    placeholder="Ville"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">
+                  Solde du portefeuille
+                </label>
+                <Input
+                  type="number"
+                  value={firebaseWalletBalance}
+                  onChange={(e) => setFirebaseWalletBalance(Number(e.target.value))}
+                  className="bg-[#0a0f1a] border-[#B8860B] text-white w-full"
+                  placeholder="0"
+                  min="0"
+                />
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <Checkbox 
+                  id="firebase-edit-admin" 
+                  checked={firebaseIsAdmin}
+                  onCheckedChange={(checked) => setFirebaseIsAdmin(checked as boolean)}
+                  className="border-[#B8860B] data-[state=checked]:bg-primary"
+                />
+                <label 
+                  htmlFor="firebase-edit-admin" 
+                  className="text-sm font-medium leading-none hover:cursor-pointer"
+                >
+                  Administrateur (pour la compatibilité avec les anciennes versions)
+                </label>
+              </div>
+            </TabsContent>
+            
+            {/* Onglet Rôles et Permissions */}
+            <TabsContent value="roles" className="space-y-5">
+              <div>
+                <h3 className="font-medium text-primary mb-3">Rôles de l'utilisateur</h3>
+                <p className="text-sm text-gray-400 mb-4">
+                  Attribuez un ou plusieurs rôles à cet utilisateur pour déterminer ses permissions dans l'application.
+                </p>
+                
+                <div className="space-y-3">
+                  <div className="flex items-center space-x-2">
+                    <Checkbox 
+                      id="role-customer" 
+                      checked={firebaseRoles.includes('customer')}
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          setFirebaseRoles([...firebaseRoles.filter(r => r !== 'customer'), 'customer']);
+                        } else {
+                          setFirebaseRoles(firebaseRoles.filter(r => r !== 'customer'));
+                        }
+                      }}
+                      className="border-[#B8860B] data-[state=checked]:bg-primary"
+                    />
+                    <label 
+                      htmlFor="role-customer" 
+                      className="text-sm font-medium leading-none hover:cursor-pointer"
+                    >
+                      Client (accès de base)
+                    </label>
+                  </div>
+                  
+                  <div className="flex items-center space-x-2">
+                    <Checkbox 
+                      id="role-admin" 
+                      checked={firebaseRoles.includes('admin')}
+                      onCheckedChange={(checked) => {
+                        const newRoles = firebaseRoles.filter(r => r !== 'admin');
+                        if (checked) {
+                          setFirebaseRoles([...newRoles, 'admin']);
+                          // Mettre à jour aussi isAdmin pour la rétrocompatibilité
+                          setFirebaseIsAdmin(true);
+                        } else {
+                          setFirebaseRoles(newRoles);
+                          // Mettre à jour aussi isAdmin pour la rétrocompatibilité
+                          setFirebaseIsAdmin(false);
+                        }
+                      }}
+                      className="border-[#B8860B] data-[state=checked]:bg-primary"
+                    />
+                    <label 
+                      htmlFor="role-admin" 
+                      className="text-sm font-medium leading-none hover:cursor-pointer"
+                    >
+                      Administrateur (accès complet)
+                    </label>
+                  </div>
+                  
+                  <div className="flex items-center space-x-2">
+                    <Checkbox 
+                      id="role-support" 
+                      checked={firebaseRoles.includes('support')}
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          setFirebaseRoles([...firebaseRoles.filter(r => r !== 'support'), 'support']);
+                        } else {
+                          setFirebaseRoles(firebaseRoles.filter(r => r !== 'support'));
+                        }
+                      }}
+                      className="border-[#B8860B] data-[state=checked]:bg-primary"
+                    />
+                    <label 
+                      htmlFor="role-support" 
+                      className="text-sm font-medium leading-none hover:cursor-pointer"
+                    >
+                      Support (gestion des tickets et des commandes)
+                    </label>
+                  </div>
+                  
+                  <div className="flex items-center space-x-2">
+                    <Checkbox 
+                      id="role-manager" 
+                      checked={firebaseRoles.includes('manager')}
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          setFirebaseRoles([...firebaseRoles.filter(r => r !== 'manager'), 'manager']);
+                        } else {
+                          setFirebaseRoles(firebaseRoles.filter(r => r !== 'manager'));
+                        }
+                      }}
+                      className="border-[#B8860B] data-[state=checked]:bg-primary"
+                    />
+                    <label 
+                      htmlFor="role-manager" 
+                      className="text-sm font-medium leading-none hover:cursor-pointer"
+                    >
+                      Manager (gestion des produits et des utilisateurs)
+                    </label>
+                  </div>
+                  
+                  <div className="flex items-center space-x-2">
+                    <Checkbox 
+                      id="role-editor" 
+                      checked={firebaseRoles.includes('editor')}
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          setFirebaseRoles([...firebaseRoles.filter(r => r !== 'editor'), 'editor']);
+                        } else {
+                          setFirebaseRoles(firebaseRoles.filter(r => r !== 'editor'));
+                        }
+                      }}
+                      className="border-[#B8860B] data-[state=checked]:bg-primary"
+                    />
+                    <label 
+                      htmlFor="role-editor" 
+                      className="text-sm font-medium leading-none hover:cursor-pointer"
+                    >
+                      Éditeur (gestion du contenu uniquement)
+                    </label>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="pt-4">
+                <h3 className="font-medium text-primary mb-2">Rôles actuels:</h3>
+                <div className="flex flex-wrap gap-2">
+                  {firebaseRoles.map((role) => (
+                    <Badge key={role} className="bg-green-900/50 text-green-200">
+                      {role}
+                    </Badge>
+                  ))}
+                  {firebaseRoles.length === 0 && (
+                    <p className="text-gray-400 text-sm">Aucun rôle attribué</p>
+                  )}
+                </div>
+              </div>
+            </TabsContent>
+            
+            {/* Onglet Suspension */}
+            <TabsContent value="suspension" className="space-y-5">
+              <div>
+                <h3 className="font-medium text-primary mb-3">État du compte utilisateur</h3>
+                <div className="flex items-center space-x-2 mb-4">
+                  <Checkbox 
+                    id="is-suspended" 
+                    checked={firebaseIsSuspended}
+                    onCheckedChange={(checked) => setFirebaseIsSuspended(checked as boolean)}
+                    className="border-[#B8860B] data-[state=checked]:bg-[#E63946]"
+                  />
+                  <label 
+                    htmlFor="is-suspended" 
+                    className="text-sm font-medium leading-none hover:cursor-pointer"
+                  >
+                    Suspendre ce compte utilisateur
+                  </label>
+                </div>
+                
+                {firebaseIsSuspended && (
+                  <div className="space-y-4 bg-[#0a0f1a] p-4 rounded-lg border border-[#E63946]/20">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-1">
+                        Raison de la suspension *
+                      </label>
+                      <Input
+                        type="text"
+                        value={firebaseSuspensionReason}
+                        onChange={(e) => setFirebaseSuspensionReason(e.target.value)}
+                        className="bg-[#132743] border-[#B8860B] text-white w-full"
+                        placeholder="Raison de la suspension"
+                        required={firebaseIsSuspended}
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-1">
+                        Durée de suspension (jours)
+                      </label>
+                      <Input
+                        type="number"
+                        value={firebaseSuspensionDuration || ''}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value);
+                          setFirebaseSuspensionDuration(isNaN(val) ? null : val);
+                        }}
+                        className="bg-[#132743] border-[#B8860B] text-white w-full"
+                        placeholder="Laisser vide pour une suspension indéfinie"
+                        min="1"
+                      />
+                      <p className="text-xs text-gray-400 mt-1">
+                        Laissez vide pour une suspension indéfinie. L'utilisateur devra être réactivé manuellement.
+                      </p>
+                    </div>
+                  </div>
+                )}
+                
+                {selectedFirestoreUser?.isSuspended && (
+                  <div className="mt-4 p-3 bg-[#E63946]/10 rounded-lg border border-[#E63946]/30">
+                    <p className="text-sm">
+                      <span className="font-medium text-[#E63946]">Compte actuellement suspendu.</span>
+                      {selectedFirestoreUser.suspensionReason && (
+                        <> Raison: <span className="font-medium">{selectedFirestoreUser.suspensionReason}</span></>
+                      )}
+                      {selectedFirestoreUser.suspendedUntil && (
+                        <> Jusqu'au: <span className="font-medium">
+                          {new Date(selectedFirestoreUser.suspendedUntil).toLocaleDateString()}
+                        </span></>
+                      )}
+                    </p>
+                  </div>
+                )}
+                
+                {selectedFirestoreUser?.activityLogs && selectedFirestoreUser.activityLogs.length > 0 && (
+                  <div className="mt-6">
+                    <h3 className="font-medium text-primary mb-2">Historique des activités récentes:</h3>
+                    <div className="max-h-40 overflow-y-auto bg-[#0a0f1a] p-2 rounded-lg text-sm">
+                      {selectedFirestoreUser.activityLogs.slice(-5).reverse().map((log, index) => (
+                        <div key={index} className="mb-2 pb-2 border-b border-gray-700/30 last:border-0">
+                          <div className="flex justify-between">
+                            <span className="font-medium text-gray-300">{log.action}</span>
+                            <span className="text-gray-400 text-xs">
+                              {new Date(log.date).toLocaleString()}
+                            </span>
+                          </div>
+                          {log.details && <p className="text-gray-400 text-xs mt-1">{log.details}</p>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </TabsContent>
+          </Tabs>
+
+          <DialogFooter className="pt-4">
+            <Button 
+              variant="outline" 
+              className="border-[#B8860B] text-white hover:bg-[#b8860b29]"
+              onClick={() => setIsEditFirestoreModalOpen(false)}
+            >
+              Annuler
+            </Button>
+            <Button 
+              className="bg-primary hover:bg-primary/90 text-black"
+              onClick={updateFirestoreUser}
+            >
+              Enregistrer
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </AdminLayout>
+  );
+};
+
+export default AdminUsersPage;

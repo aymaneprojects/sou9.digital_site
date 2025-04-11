@@ -1,0 +1,57 @@
+[vite] connecting...
+[vite] connected.
+📚 Chargement des traductions:
+🇫🇷 FR: 20 entrées
+🇬🇧 EN: 18 entrées
+🇸🇦 AR: 17 entrées
+🌐 Ressources i18n: 
+Object {en: {…}, fr: {…}, ar: {…}}
+i18next: languageChanged fr
+i18next: initialized 
+Object {debug: true, initAsync: true, ns: Array(1), defaultNS: Array(1), fallbackLng: Array(1), …}
+🔄 Langue actuelle: fr
+🔍 Test de traduction "home.title": Accueil
+🔍 Test de traduction "navigation.home": Accueil
+Firebase est désactivé, utilisation de l'authentification locale à la place
+📚 Chargement des traductions:
+🇫🇷 FR: 20 entrées
+🇬🇧 EN: 18 entrées
+🇸🇦 AR: 17 entrées
+🌐 Ressources i18n: 
+Object {en: {…}, fr: {…}, ar: {…}}
+i18next: languageChanged fr
+i18next: init: i18next is already initialized. You should call init just once!
+i18next: initialized 
+Object {debug: true, initAsync: true, ns: Array(1), defaultNS: Array(1), fallbackLng: Array(1), …}
+🔄 Langue actuelle: fr
+🔍 Test de traduction "home.title": Accueil
+🔍 Test de traduction "navigation.home": Accueil
+🔍 Vérification de l'utilisateur en cache dans localStorage: {"id":0,"username":"admin","email":"admin@sou9digital.com","role":"admin","firstName":"Admin","lastName":"User","phoneNumber":null,"createdAt":"2025-04-06T16:34:17.760Z"}
+👤 Utilisateur trouvé dans localStorage: 
+Object {id: 0, username: "admin", email: "admin@sou9digital.com", role: "admin", firstName: "Admin", …}
+🔄 Vérification de la session avec le serveur...
+i18next: languageChanged fr
+⚠️ Erreur lors de la vérification avec le serveur: 
+Error {}
+👤 Utilisation des données en cache comme fallback
+i18next::translator: missingKey fr translation Mon profil Mon profil
+i18next::translator: missingKey fr translation Administration Administration
+i18next::translator: missingKey fr translation Déconnexion Déconnexion
+i18next::translator: missingKey fr translation admin.promos admin.promos
+i18next::translator: missingKey fr translation admin.totalUsers admin.totalUsers
+i18next::translator: missingKey fr translation admin.newUsers admin.newUsers
+i18next::translator: missingKey fr translation admin.orderStatus admin.orderStatus
+i18next::translator: missingKey fr translation admin.totalUsers admin.totalUsers
+i18next::translator: missingKey fr translation admin.newUsers admin.newUsers
+i18next::translator: missingKey fr translation admin.orderStatus admin.orderStatus
+i18next::translator: missingKey fr translation admin.totalUsers admin.totalUsers
+i18next::translator: missingKey fr translation admin.newUsers admin.newUsers
+i18next::translator: missingKey fr translation admin.orderStatus admin.orderStatus
+i18next::translator: missingKey fr translation admin.totalUsers admin.totalUsers
+i18next::translator: missingKey fr translation admin.newUsers admin.newUsers
+i18next::translator: missingKey fr translation admin.orderStatus admin.orderStatus
+Session appears to be expired, refreshing auth state...
+Error fetching users: 
+Error {}
+
+Session appears to be expired, refreshing auth state...

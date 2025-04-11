@@ -1,0 +1,2193 @@
+import { useState, useEffect } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import { 
+  FaSearch, 
+  FaEye, 
+  FaCheck, 
+  FaTimes, 
+  FaEnvelope, 
+  FaKey, 
+  FaSortAmountDown, 
+  FaSortAmountUp, 
+  FaExclamationTriangle,
+  FaInfo,
+  FaSave,
+  FaSpinner,
+  FaEdit,
+  FaChevronLeft,
+  FaChevronRight,
+  FaAngleLeft,
+  FaAngleRight,
+  FaAngleDoubleLeft,
+  FaAngleDoubleRight
+} from "react-icons/fa";
+import { formatCurrency, formatDate } from "@/lib/utils";
+import { useLanguage } from "@/hooks/useLanguage";
+
+type OrderStatus = 'all' | 'pending' | 'paid' | 'delivered' | 'cancelled';
+type SortField = 'date' | 'amount' | 'status';
+type SortDirection = 'asc' | 'desc';
+
+interface OrderDetail {
+  id: number;
+  userId: number | null;
+  status: string;
+  totalAmount: number;
+  email: string;
+  firstName: string;
+  lastName: string;
+  phoneNumber: string;
+  paymentMethod: string;
+  paymentStatus: string;
+  createdAt: string;
+  items: OrderItem[];
+  gameCodes?: GameCode[];
+}
+
+interface OrderItem {
+  id: number;
+  orderId: number;
+  productId: number;
+  quantity: number;
+  price: number;
+  productName?: string;
+  platform?: string;
+  editionId?: number | null;
+  editionName?: string;
+  productType?: 'game' | 'giftCard';
+}
+
+// Define an interface for game codes
+interface GameCode {
+  id: number;
+  productId: number;
+  code: string;
+  isUsed: boolean;
+  orderId: number | null;
+  createdAt?: string;
+  editionId?: number | null;
+  platform?: string;
+  productName?: string;
+  productType?: 'game' | 'giftCard';
+}
+
+interface ProductItem {
+  id: number;
+  name: string;
+  platform: string;
+  gameCode?: string;
+}
+
+interface GameCodeFormProps {
+  orderItems: any[];
+  gameCodes: { [key: number]: string };
+  isEditing: { [key: number]: boolean };
+  isSubmitting: boolean;
+  selectedOrder: OrderDetail;
+  onSave: () => void;
+  onCodeChange: (productId: number, code: string) => void;
+  onToggleEdit: (productId: number) => void;
+  onEditAll: () => void;
+  onCancelEdit: () => void;
+  translate: (key: string) => string;
+}
+
+// Modern Game Code Form UI Component for the new interface tab
+const GameCodeForm = ({ 
+  orderItems,
+  gameCodes,
+  isEditing,
+  isSubmitting,
+  selectedOrder,
+  onSave,
+  onCodeChange,
+  onToggleEdit,
+  onEditAll,
+  onCancelEdit,
+  translate,
+}: GameCodeFormProps) => {
+  const { toast } = useToast();
+  return (
+    <div className="bg-[#0a0f1a] p-5 rounded-[0.75rem] space-y-6">
+      <div className="flex items-center justify-between">
+        <h3 className="font-cairo text-lg">{translate("admin.gameCodes")}</h3>
+        <div className="flex space-x-2">
+          <Button
+            variant="outline"
+            className="border-[#B8860B] text-[#B8860B] hover:bg-[#132743]"
+            disabled={isSubmitting || Object.keys(gameCodes).length === 0}
+            onClick={onSave}
+          >
+            {isSubmitting ? (
+              <>
+                <FaSpinner className="mr-2 animate-spin" />
+                {translate("admin.saving") || "Saving..."}
+              </>
+            ) : (
+              <>
+                <FaSave className="mr-2" />
+                {translate("admin.saveCodes") || "Save Codes"}
+              </>
+            )}
+          </Button>
+        </div>
+      </div>
+      
+      {selectedOrder.paymentStatus !== 'completed' && (
+        <Alert className="bg-[#132743] border-blue-600">
+          <FaInfo className="h-4 w-4 text-blue-500" />
+          <AlertDescription className="text-blue-400">
+            <div className="mt-2 text-yellow-400 border border-yellow-500 bg-yellow-900/30 p-3 rounded">
+              <div className="flex items-center gap-2 font-bold mb-2">
+                <FaExclamationTriangle />
+                {translate("admin.bankVerificationRequired") || "IMPORTANT: Bank verification required"}
+              </div>
+              <p className="text-sm">
+                {translate("admin.bankVerificationRequiredDesc") || "Only add game codes after verifying payment receipt in the bank account. Codes are NOT automatically assigned."}
+              </p>
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
+      
+      {selectedOrder.gameCodes && selectedOrder.gameCodes.length > 0 ? (
+        <Alert className="bg-[#132743] border-green-600">
+          <FaCheck className="h-4 w-4 text-green-500" />
+          <AlertDescription className="text-green-400">
+            {translate("admin.gameCodesSent") || "Game codes have been sent to the customer"}
+          </AlertDescription>
+        </Alert>
+      ) : (
+        <Alert className="bg-[#132743] border-yellow-600">
+          <FaExclamationTriangle className="h-4 w-4 text-yellow-500" />
+          <AlertDescription className="text-yellow-400">
+            {translate("admin.noGameCodesYet") || "No game codes have been assigned yet"}
+          </AlertDescription>
+        </Alert>
+      )}
+      
+      <div className="grid gap-6">
+        {orderItems.map((item) => (
+          <Card key={item.id} className="bg-[#132743] border-[#264661]">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-lg font-cairo text-white">{item.productName || item.name}</CardTitle>
+              <CardDescription className="text-gray-300">
+                {item.platform ? `${translate("admin.platform")}: ${item.platform}` : ''} 
+                {item.editionName ? ` | ${translate("admin.edition")}: ${item.editionName}` : ''}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div>
+                  <p className="text-sm font-medium mb-2 text-gray-300">{translate("admin.gameCode")}</p>
+                  <div className="flex space-x-2">
+                    <Input
+                      className="bg-[#0a0f1a] border-[#B8860B] focus:border-primary"
+                      value={gameCodes[item.productId] || ''}
+                      onChange={(e) => onCodeChange(item.productId, e.target.value)}
+                      placeholder={translate("admin.enterGameCode") || "Enter game code here"}
+                    />
+                  </div>
+                </div>
+                
+                {selectedOrder.gameCodes && selectedOrder.gameCodes.find(code => code.productId === item.productId) && (
+                  <div>
+                    <p className="text-sm font-medium mb-1 text-gray-300">{translate("admin.currentCode") || "Current Code"}</p>
+                    <code className="bg-[#0a0f1a] p-2 rounded block text-green-400 font-mono w-full overflow-x-auto">
+                      {selectedOrder.gameCodes.find(code => code.productId === item.productId)?.code}
+                    </code>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+      
+      {selectedOrder.gameCodes && selectedOrder.gameCodes.length > 0 && (
+        <div className="flex justify-end">
+          <Button
+            variant="outline"
+            className="border-[#B8860B] text-[#B8860B] hover:bg-[#B8860B] hover:text-white"
+            onClick={() => {
+              apiRequest("POST", `/api/orders/${selectedOrder.id}/send-game-codes`)
+                .then(() => {
+                  toast({
+                    title: translate("admin.emailSent") || "Email Sent",
+                    description: translate("admin.gameCodesEmailResent") || "Game codes email has been resent to the customer",
+                    variant: "success",
+                  });
+                })
+                .catch(error => {
+                  toast({
+                    title: translate("admin.error") || "Error",
+                    description: error instanceof Error ? error.message : String(error),
+                    variant: "destructive",
+                  });
+                });
+            }}
+          >
+            <FaEnvelope className="mr-2" />
+            {translate("admin.resendCodes") || "Resend Codes"}
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const OrderManagement = () => {
+  const { translate } = useLanguage();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [selectedTab, setSelectedTab] = useState<OrderStatus>('all');
+  const [searchTerm, setSearchTerm] = useState("");
+  const [sortField, setSortField] = useState<SortField>('date');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState<OrderDetail | null>(null);
+  const [orderItems, setOrderItems] = useState<any[]>([]);
+  const [gameCodes, setGameCodes] = useState<{ [key: number]: string }>({});
+  const [isEditing, setIsEditing] = useState<{ [key: number]: boolean }>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [ordersPerPage] = useState(10);
+  
+  // Fetch orders
+  const { data: orders = [], isLoading, isError } = useQuery({
+    queryKey: ['/api/orders'],
+    queryFn: async () => {
+      const response = await fetch('/api/orders', {
+        credentials: 'include'
+      });
+      if (!response.ok) {
+        throw new Error('Failed to fetch orders');
+      }
+      return response.json();
+    },
+    staleTime: 300000, // 5 minutes
+    refetchInterval: 180000, // refresh every 3 minutes
+    retry: 3, // retry 3 times on failure
+    retryDelay: attempt => Math.min(attempt > 1 ? 2 ** attempt * 1000 : 1000, 30 * 1000),
+  });
+  
+  // Update order status mutation
+  const updateOrderStatusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: number; status: string }) => 
+      apiRequest("PATCH", `/api/orders/${id}/status`, { status }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/orders'] });
+      toast({
+        title: translate("admin.orderUpdated"),
+        description: translate("admin.orderStatusUpdated"),
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: translate("admin.error"),
+        description: error instanceof Error ? error.message : String(error),
+        variant: "destructive",
+      });
+    }
+  });
+  
+  // Update payment status mutation
+  const updatePaymentStatusMutation = useMutation({
+    mutationFn: ({ id, paymentStatus }: { id: number; paymentStatus: string }) => 
+      apiRequest("PATCH", `/api/orders/${id}/payment`, { paymentStatus }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/orders'] });
+      toast({
+        title: translate("admin.paymentUpdated"),
+        description: translate("admin.paymentStatusUpdated"),
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: translate("admin.error"),
+        description: error instanceof Error ? error.message : String(error),
+        variant: "destructive",
+      });
+    }
+  });
+  
+  // Email notification mutation (mock implementation)
+  const sendEmailNotificationMutation = useMutation({
+    mutationFn: async (orderId: number) => {
+      try {
+        const response = await fetch(`/api/orders/${orderId}/send-game-codes`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.message || 'Failed to send email notification');
+        }
+        
+        return await response.json();
+      } catch (error) {
+        throw error;
+      }
+    },
+    onSuccess: () => {
+      toast({
+        title: translate("admin.emailSent"),
+        description: translate("admin.emailNotificationSent"),
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/orders'] });
+    },
+    onError: (error) => {
+      toast({
+        title: translate("admin.error"),
+        description: error instanceof Error ? error.message : String(error),
+        variant: "destructive",
+      });
+    },
+    retry: 2,
+    retryDelay: 1000
+  });
+  
+
+  
+  // Filter and sort orders
+  const filteredOrders = orders
+    .filter((order: OrderDetail) => {
+      // Filter by tab/status
+      if (selectedTab !== 'all' && order.status !== selectedTab) {
+        return false;
+      }
+      
+      // Filter by search term
+      if (searchTerm) {
+        const searchLower = searchTerm.toLowerCase();
+        return (
+          order.id.toString().includes(searchLower) ||
+          order.email.toLowerCase().includes(searchLower) ||
+          `${order.firstName} ${order.lastName}`.toLowerCase().includes(searchLower) ||
+          order.phoneNumber.includes(searchLower)
+        );
+      }
+      
+      return true;
+    })
+    .sort((a: OrderDetail, b: OrderDetail) => {
+      // Sort by selected field and direction
+      if (sortField === 'date') {
+        return sortDirection === 'desc'
+          ? new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          : new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      } else if (sortField === 'amount') {
+        return sortDirection === 'desc'
+          ? b.totalAmount - a.totalAmount
+          : a.totalAmount - b.totalAmount;
+      } else if (sortField === 'status') {
+        return sortDirection === 'desc'
+          ? b.status.localeCompare(a.status)
+          : a.status.localeCompare(b.status);
+      }
+      return 0;
+    });
+  
+  // Calculate pagination
+  const totalOrders = filteredOrders.length;
+  const totalPages = Math.ceil(totalOrders / ordersPerPage);
+  
+  // Get current orders for current page
+  const indexOfLastOrder = currentPage * ordersPerPage;
+  const indexOfFirstOrder = indexOfLastOrder - ordersPerPage;
+  const currentOrders = filteredOrders.slice(indexOfFirstOrder, indexOfLastOrder);
+  
+  // Change page
+  const handlePageChange = (pageNumber: number) => {
+    setCurrentPage(pageNumber);
+  };
+  
+  const handleViewOrder = async (orderId: number) => {
+    console.log("🚀 handleViewOrder - Commande ID:", orderId);
+    try {
+      // Fetch order details
+      console.log("📊 Récupération des détails de la commande", orderId);
+      const response = await fetch(`/api/orders/${orderId}`, {
+        credentials: 'include'
+      });
+      
+      if (!response.ok) {
+        console.error("❌ Erreur lors de la récupération de la commande:", response.status, response.statusText);
+        throw new Error(`Error fetching order: ${response.statusText}`);
+      }
+      
+      const orderData = await response.json();
+      console.log("✅ Données de commande reçues:", orderData);
+      setSelectedOrder(orderData);
+      
+      // Reset game codes and editing state
+      console.log("🧹 Réinitialisation des codes de jeu et de l'état d'édition");
+      setGameCodes({});
+      setIsEditing({});
+      
+      // Fetch order items with product details
+      console.log("📦 Récupération des articles de la commande", orderId);
+      const itemsResponse = await fetch(`/api/orders/${orderId}/items`, {
+        credentials: 'include'
+      });
+      
+      if (itemsResponse.ok) {
+        const itemsData = await itemsResponse.json();
+        console.log("✅ Articles de commande reçus:", itemsData);
+        setOrderItems(itemsData);
+        
+        // Fetch game codes for this order
+        console.log("🎮 Récupération des codes de jeu pour la commande", orderId);
+        const codesResponse = await fetch(`/api/orders/${orderId}/game-codes`, {
+          credentials: 'include'
+        });
+        
+        if (codesResponse.ok) {
+          const codesData = await codesResponse.json();
+          console.log("✅ Codes de jeu reçus:", codesData);
+          const codeMap: { [key: number]: string } = {};
+          
+          // Create a map of productId -> code
+          codesData.forEach((code: GameCode) => {
+            console.log(`🔑 Code pour le produit ${code.productId}:`, code.code);
+            codeMap[code.productId] = code.code;
+          });
+          
+          console.log("💾 Enregistrement des codes de jeu dans l'état:", codeMap);
+          setGameCodes(codeMap);
+
+          // Mettre à jour selectedOrder avec les codes
+          setSelectedOrder(prev => {
+            if (prev) {
+              console.log("🔄 Mise à jour de l'ordre sélectionné avec les codes de jeu");
+              return { ...prev, gameCodes: codesData };
+            }
+            return prev;
+          });
+        } else {
+          console.log("⚠️ Aucun code de jeu trouvé pour la commande", orderId);
+        }
+      } else {
+        console.error("❌ Erreur lors de la récupération des articles:", itemsResponse.status, itemsResponse.statusText);
+      }
+      
+      console.log("🔔 Ouverture de la boîte de dialogue");
+      setIsDetailDialogOpen(true);
+    } catch (error) {
+      console.error("❌❌ Erreur non gérée:", error);
+      toast({
+        title: translate("admin.error"),
+        description: error instanceof Error ? error.message : String(error),
+        variant: "destructive",
+      });
+    }
+  };
+  
+  const handleUpdateOrderStatus = (orderId: number, status: string) => {
+    updateOrderStatusMutation.mutate({ id: orderId, status });
+  };
+  
+  const handleUpdatePaymentStatus = (orderId: number, paymentStatus: string) => {
+    updatePaymentStatusMutation.mutate({ id: orderId, paymentStatus });
+  };
+  
+  const handleSendEmailNotification = (orderId: number) => {
+    sendEmailNotificationMutation.mutate(orderId);
+  };
+  
+  // Game codes mutation for adding and sending game codes
+  const saveGameCodesMutation = useMutation({
+    mutationFn: async ({ orderId, codes }: { orderId: number; codes: { [key: number]: string } }) => {
+      try {
+        // Convert the codes object to an array of objects with productId, editionId, platform and code
+        const codeItems = Object.entries(codes).map(([productId, code]) => {
+          const item = orderItems.find(item => item.productId === parseInt(productId));
+          return {
+            productId: parseInt(productId),
+            code,
+            editionId: item?.editionId || null,
+            platform: item?.platform || null,
+            productType: item?.productType || "game"
+          };
+        });
+        
+        // Utiliser l'endpoint pour ajouter les codes de jeu (pas pour les envoyer)
+        const response = await fetch(`/api/game-codes`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ 
+            orderId: orderId,
+            codes: codeItems 
+          })
+        });
+        
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.message || 'Failed to save game codes');
+        }
+        
+        return await response.json();
+      } catch (error) {
+        console.error('Error saving game codes:', error);
+        throw error;
+      }
+    },
+    onSuccess: () => {
+      toast({
+        title: translate("admin.success"),
+        description: translate("admin.gameCodesSaved"),
+      });
+      
+      // Invalidate multiple related queries
+      queryClient.invalidateQueries({ queryKey: ['/api/orders'] });
+      
+      // If there's a selected order, refetch its details to update the game codes
+      if (selectedOrder) {
+        queryClient.invalidateQueries({ queryKey: [`/api/orders/${selectedOrder.id}`] });
+        queryClient.invalidateQueries({ queryKey: [`/api/orders/${selectedOrder.id}/game-codes`] });
+      }
+      
+      // Reset editing state after successful save
+      setIsEditing({});
+      setIsSubmitting(false);
+    },
+    onError: (error) => {
+      toast({
+        title: translate("admin.error"),
+        description: error instanceof Error ? error.message : String(error),
+        variant: "destructive",
+      });
+      setIsSubmitting(false);
+    },
+    retry: 2,
+    retryDelay: attempt => Math.min(attempt > 1 ? 2 ** attempt * 1000 : 1000, 10 * 1000)
+  });
+  
+  const handleSaveGameCodes = () => {
+    if (!selectedOrder) return;
+    
+    // Vérifie si au moins un code a été saisi
+    if (Object.keys(gameCodes).length === 0) {
+      toast({
+        title: translate("admin.error") || "Error",
+        description: translate("admin.noGameCodesEntered") || "No game codes entered. Please enter at least one game code.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // Vérifie que les codes ne sont pas vides
+    let hasEmptyCode = false;
+    Object.values(gameCodes).forEach(code => {
+      if (!code.trim()) {
+        hasEmptyCode = true;
+      }
+    });
+    
+    if (hasEmptyCode) {
+      toast({
+        title: translate("admin.error") || "Error",
+        description: translate("admin.emptyGameCodes") || "Some game codes are empty. Please fill all code fields.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    setIsSubmitting(true);
+    saveGameCodesMutation.mutate({ 
+      orderId: selectedOrder.id, 
+      codes: gameCodes
+    });
+  };
+  
+  // Toggle editing mode for a specific product
+  const handleToggleEdit = (productId: number) => {
+    setIsEditing(prev => ({
+      ...prev,
+      [productId]: !prev[productId]
+    }));
+  };
+  
+  // Handle game code input changes
+  const handleCodeChange = (productId: number, code: string) => {
+    setGameCodes(prev => ({
+      ...prev,
+      [productId]: code
+    }));
+  };
+  
+  // Reset editing state for all products
+  const handleCancelEdit = () => {
+    setIsEditing({});
+  };
+  
+  // Initialize editing for all products
+  const handleEditAll = () => {
+    const editingState: { [key: number]: boolean } = {};
+    orderItems.forEach(item => {
+      editingState[item.productId] = true;
+    });
+    setIsEditing(editingState);
+  };
+  
+  const toggleSortDirection = () => {
+    setSortDirection(sortDirection === 'desc' ? 'asc' : 'desc');
+  };
+  
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      toggleSortDirection();
+    } else {
+      setSortField(field);
+      setSortDirection('desc');
+    }
+  };
+  
+  const getStatusBadgeColor = (status: string) => {
+    switch (status) {
+      case 'pending':
+        return 'bg-yellow-900 text-yellow-300 hover:bg-yellow-800';
+      case 'paid':
+        return 'bg-blue-900 text-blue-300 hover:bg-blue-800';
+      case 'delivered':
+        return 'bg-green-900 text-green-300 hover:bg-green-800';
+      case 'cancelled':
+        return 'bg-red-900 text-red-300 hover:bg-red-800';
+      default:
+        return 'bg-gray-900 text-gray-300 hover:bg-gray-800';
+    }
+  };
+  
+  const getPaymentStatusBadgeColor = (status: string) => {
+    switch (status) {
+      case 'pending':
+        return 'bg-yellow-900 text-yellow-300 hover:bg-yellow-800';
+      case 'completed':
+        return 'bg-green-900 text-green-300 hover:bg-green-800';
+      default:
+        return 'bg-gray-900 text-gray-300 hover:bg-gray-800';
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <h1 className="font-cairo font-bold text-3xl text-white">
+          {translate("admin.orders")}
+        </h1>
+      </div>
+      
+      <Tabs defaultValue="all" className="w-full" onValueChange={(value) => setSelectedTab(value as OrderStatus)}>
+        <div className="flex justify-between items-center mb-4">
+          <TabsList className="bg-[#0a0f1a]">
+            <TabsTrigger value="all" className="data-[state=active]:bg-primary data-[state=active]:text-background">
+              {translate("admin.allOrders")}
+            </TabsTrigger>
+            <TabsTrigger value="pending" className="data-[state=active]:bg-primary data-[state=active]:text-background">
+              {translate("admin.pending")}
+            </TabsTrigger>
+            <TabsTrigger value="paid" className="data-[state=active]:bg-primary data-[state=active]:text-background">
+              {translate("admin.paid")}
+            </TabsTrigger>
+            <TabsTrigger value="delivered" className="data-[state=active]:bg-primary data-[state=active]:text-background">
+              {translate("admin.delivered")}
+            </TabsTrigger>
+            <TabsTrigger value="cancelled" className="data-[state=active]:bg-primary data-[state=active]:text-background">
+              {translate("admin.cancelled")}
+            </TabsTrigger>
+          </TabsList>
+          
+          <div className="flex items-center space-x-2">
+            <div className="relative">
+              <FaSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+              <Input 
+                className="pl-10 bg-[#0a0f1a] border-[#B8860B] focus:border-primary w-64"
+                placeholder={translate("admin.searchOrders")}
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+          </div>
+        </div>
+        
+        <TabsContent value="all" className="mt-0">
+          <OrdersTable 
+            orders={currentOrders}
+            isLoading={isLoading}
+            sortField={sortField}
+            sortDirection={sortDirection}
+            onSort={handleSort}
+            onViewOrder={handleViewOrder}
+            onUpdateOrderStatus={handleUpdateOrderStatus}
+            onUpdatePaymentStatus={handleUpdatePaymentStatus}
+            getStatusBadgeColor={getStatusBadgeColor}
+            getPaymentStatusBadgeColor={getPaymentStatusBadgeColor}
+            translate={translate}
+          />
+          
+          {totalOrders > 0 && (
+            <div className="flex justify-between items-center mt-4">
+              <div className="text-sm text-gray-400">
+                {translate("admin.showing")} {indexOfFirstOrder + 1} - {Math.min(indexOfLastOrder, totalOrders)} {translate("admin.of")} {totalOrders} {translate("admin.orders")}
+              </div>
+              <div className="flex space-x-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handlePageChange(1)}
+                  disabled={currentPage === 1}
+                  className="border-[#B8860B] hover:bg-[#132743]"
+                >
+                  <FaAngleDoubleLeft className="mr-1" />
+                  {translate("admin.first")}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className="border-[#B8860B] hover:bg-[#132743]"
+                >
+                  <FaAngleLeft className="mr-1" />
+                  {translate("admin.prev")}
+                </Button>
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  // Show pages around current page
+                  let pageNum;
+                  if (totalPages <= 5) {
+                    pageNum = i + 1;
+                  } else if (currentPage <= 3) {
+                    pageNum = i + 1;
+                  } else if (currentPage >= totalPages - 2) {
+                    pageNum = totalPages - 4 + i;
+                  } else {
+                    pageNum = currentPage - 2 + i;
+                  }
+                  
+                  return (
+                    <Button
+                      key={pageNum}
+                      variant={currentPage === pageNum ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => handlePageChange(pageNum)}
+                      className={currentPage === pageNum 
+                        ? "bg-primary text-white" 
+                        : "border-[#B8860B] hover:bg-[#132743]"
+                      }
+                    >
+                      {pageNum}
+                    </Button>
+                  );
+                })}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                  className="border-[#B8860B] hover:bg-[#132743]"
+                >
+                  {translate("admin.next")}
+                  <FaAngleRight className="ml-1" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handlePageChange(totalPages)}
+                  disabled={currentPage === totalPages}
+                  className="border-[#B8860B] hover:bg-[#132743]"
+                >
+                  {translate("admin.last")}
+                  <FaAngleDoubleRight className="ml-1" />
+                </Button>
+              </div>
+            </div>
+          )}
+        </TabsContent>
+        
+        <TabsContent value="pending" className="mt-0">
+          <OrdersTable 
+            orders={currentOrders}
+            isLoading={isLoading}
+            sortField={sortField}
+            sortDirection={sortDirection}
+            onSort={handleSort}
+            onViewOrder={handleViewOrder}
+            onUpdateOrderStatus={handleUpdateOrderStatus}
+            onUpdatePaymentStatus={handleUpdatePaymentStatus}
+            getStatusBadgeColor={getStatusBadgeColor}
+            getPaymentStatusBadgeColor={getPaymentStatusBadgeColor}
+            translate={translate}
+          />
+          
+          {totalOrders > 0 && (
+            <div className="flex justify-between items-center mt-4">
+              <div className="text-sm text-gray-400">
+                {translate("admin.showing")} {indexOfFirstOrder + 1} - {Math.min(indexOfLastOrder, totalOrders)} {translate("admin.of")} {totalOrders} {translate("admin.orders")}
+              </div>
+              <div className="flex space-x-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handlePageChange(1)}
+                  disabled={currentPage === 1}
+                  className="border-[#B8860B] hover:bg-[#132743]"
+                >
+                  <FaAngleDoubleLeft className="mr-1" />
+                  {translate("admin.first")}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className="border-[#B8860B] hover:bg-[#132743]"
+                >
+                  <FaAngleLeft className="mr-1" />
+                  {translate("admin.prev")}
+                </Button>
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  // Show pages around current page
+                  let pageNum;
+                  if (totalPages <= 5) {
+                    pageNum = i + 1;
+                  } else if (currentPage <= 3) {
+                    pageNum = i + 1;
+                  } else if (currentPage >= totalPages - 2) {
+                    pageNum = totalPages - 4 + i;
+                  } else {
+                    pageNum = currentPage - 2 + i;
+                  }
+                  
+                  return (
+                    <Button
+                      key={pageNum}
+                      variant={currentPage === pageNum ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => handlePageChange(pageNum)}
+                      className={currentPage === pageNum 
+                        ? "bg-primary text-white" 
+                        : "border-[#B8860B] hover:bg-[#132743]"
+                      }
+                    >
+                      {pageNum}
+                    </Button>
+                  );
+                })}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                  className="border-[#B8860B] hover:bg-[#132743]"
+                >
+                  {translate("admin.next")}
+                  <FaAngleRight className="ml-1" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handlePageChange(totalPages)}
+                  disabled={currentPage === totalPages}
+                  className="border-[#B8860B] hover:bg-[#132743]"
+                >
+                  {translate("admin.last")}
+                  <FaAngleDoubleRight className="ml-1" />
+                </Button>
+              </div>
+            </div>
+          )}
+        </TabsContent>
+        
+        <TabsContent value="paid" className="mt-0">
+          <OrdersTable 
+            orders={currentOrders}
+            isLoading={isLoading}
+            sortField={sortField}
+            sortDirection={sortDirection}
+            onSort={handleSort}
+            onViewOrder={handleViewOrder}
+            onUpdateOrderStatus={handleUpdateOrderStatus}
+            onUpdatePaymentStatus={handleUpdatePaymentStatus}
+            getStatusBadgeColor={getStatusBadgeColor}
+            getPaymentStatusBadgeColor={getPaymentStatusBadgeColor}
+            translate={translate}
+          />
+          
+          {totalOrders > 0 && (
+            <div className="flex justify-between items-center mt-4">
+              <div className="text-sm text-gray-400">
+                {translate("admin.showing")} {indexOfFirstOrder + 1} - {Math.min(indexOfLastOrder, totalOrders)} {translate("admin.of")} {totalOrders} {translate("admin.orders")}
+              </div>
+              <div className="flex space-x-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handlePageChange(1)}
+                  disabled={currentPage === 1}
+                  className="border-[#B8860B] hover:bg-[#132743]"
+                >
+                  <FaAngleDoubleLeft className="mr-1" />
+                  {translate("admin.first")}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className="border-[#B8860B] hover:bg-[#132743]"
+                >
+                  <FaAngleLeft className="mr-1" />
+                  {translate("admin.prev")}
+                </Button>
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  // Show pages around current page
+                  let pageNum;
+                  if (totalPages <= 5) {
+                    pageNum = i + 1;
+                  } else if (currentPage <= 3) {
+                    pageNum = i + 1;
+                  } else if (currentPage >= totalPages - 2) {
+                    pageNum = totalPages - 4 + i;
+                  } else {
+                    pageNum = currentPage - 2 + i;
+                  }
+                  
+                  return (
+                    <Button
+                      key={pageNum}
+                      variant={currentPage === pageNum ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => handlePageChange(pageNum)}
+                      className={currentPage === pageNum 
+                        ? "bg-primary text-white" 
+                        : "border-[#B8860B] hover:bg-[#132743]"
+                      }
+                    >
+                      {pageNum}
+                    </Button>
+                  );
+                })}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                  className="border-[#B8860B] hover:bg-[#132743]"
+                >
+                  {translate("admin.next")}
+                  <FaAngleRight className="ml-1" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handlePageChange(totalPages)}
+                  disabled={currentPage === totalPages}
+                  className="border-[#B8860B] hover:bg-[#132743]"
+                >
+                  {translate("admin.last")}
+                  <FaAngleDoubleRight className="ml-1" />
+                </Button>
+              </div>
+            </div>
+          )}
+        </TabsContent>
+        
+        <TabsContent value="delivered" className="mt-0">
+          <OrdersTable 
+            orders={currentOrders}
+            isLoading={isLoading}
+            sortField={sortField}
+            sortDirection={sortDirection}
+            onSort={handleSort}
+            onViewOrder={handleViewOrder}
+            onUpdateOrderStatus={handleUpdateOrderStatus}
+            onUpdatePaymentStatus={handleUpdatePaymentStatus}
+            getStatusBadgeColor={getStatusBadgeColor}
+            getPaymentStatusBadgeColor={getPaymentStatusBadgeColor}
+            translate={translate}
+          />
+          
+          {totalOrders > 0 && (
+            <div className="flex justify-between items-center mt-4">
+              <div className="text-sm text-gray-400">
+                {translate("admin.showing")} {indexOfFirstOrder + 1} - {Math.min(indexOfLastOrder, totalOrders)} {translate("admin.of")} {totalOrders} {translate("admin.orders")}
+              </div>
+              <div className="flex space-x-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handlePageChange(1)}
+                  disabled={currentPage === 1}
+                  className="border-[#B8860B] hover:bg-[#132743]"
+                >
+                  <FaAngleDoubleLeft className="mr-1" />
+                  {translate("admin.first")}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className="border-[#B8860B] hover:bg-[#132743]"
+                >
+                  <FaAngleLeft className="mr-1" />
+                  {translate("admin.prev")}
+                </Button>
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  // Show pages around current page
+                  let pageNum;
+                  if (totalPages <= 5) {
+                    pageNum = i + 1;
+                  } else if (currentPage <= 3) {
+                    pageNum = i + 1;
+                  } else if (currentPage >= totalPages - 2) {
+                    pageNum = totalPages - 4 + i;
+                  } else {
+                    pageNum = currentPage - 2 + i;
+                  }
+                  
+                  return (
+                    <Button
+                      key={pageNum}
+                      variant={currentPage === pageNum ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => handlePageChange(pageNum)}
+                      className={currentPage === pageNum 
+                        ? "bg-primary text-white" 
+                        : "border-[#B8860B] hover:bg-[#132743]"
+                      }
+                    >
+                      {pageNum}
+                    </Button>
+                  );
+                })}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                  className="border-[#B8860B] hover:bg-[#132743]"
+                >
+                  {translate("admin.next")}
+                  <FaAngleRight className="ml-1" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handlePageChange(totalPages)}
+                  disabled={currentPage === totalPages}
+                  className="border-[#B8860B] hover:bg-[#132743]"
+                >
+                  {translate("admin.last")}
+                  <FaAngleDoubleRight className="ml-1" />
+                </Button>
+              </div>
+            </div>
+          )}
+        </TabsContent>
+        
+        <TabsContent value="cancelled" className="mt-0">
+          <OrdersTable 
+            orders={currentOrders}
+            isLoading={isLoading}
+            sortField={sortField}
+            sortDirection={sortDirection}
+            onSort={handleSort}
+            onViewOrder={handleViewOrder}
+            onUpdateOrderStatus={handleUpdateOrderStatus}
+            onUpdatePaymentStatus={handleUpdatePaymentStatus}
+            getStatusBadgeColor={getStatusBadgeColor}
+            getPaymentStatusBadgeColor={getPaymentStatusBadgeColor}
+            translate={translate}
+          />
+          
+          {totalOrders > 0 && (
+            <div className="flex justify-between items-center mt-4">
+              <div className="text-sm text-gray-400">
+                {translate("admin.showing")} {indexOfFirstOrder + 1} - {Math.min(indexOfLastOrder, totalOrders)} {translate("admin.of")} {totalOrders} {translate("admin.orders")}
+              </div>
+              <div className="flex space-x-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handlePageChange(1)}
+                  disabled={currentPage === 1}
+                  className="border-[#B8860B] hover:bg-[#132743]"
+                >
+                  <FaAngleDoubleLeft className="mr-1" />
+                  {translate("admin.first")}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className="border-[#B8860B] hover:bg-[#132743]"
+                >
+                  <FaAngleLeft className="mr-1" />
+                  {translate("admin.prev")}
+                </Button>
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  // Show pages around current page
+                  let pageNum;
+                  if (totalPages <= 5) {
+                    pageNum = i + 1;
+                  } else if (currentPage <= 3) {
+                    pageNum = i + 1;
+                  } else if (currentPage >= totalPages - 2) {
+                    pageNum = totalPages - 4 + i;
+                  } else {
+                    pageNum = currentPage - 2 + i;
+                  }
+                  
+                  return (
+                    <Button
+                      key={pageNum}
+                      variant={currentPage === pageNum ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => handlePageChange(pageNum)}
+                      className={currentPage === pageNum 
+                        ? "bg-primary text-white" 
+                        : "border-[#B8860B] hover:bg-[#132743]"
+                      }
+                    >
+                      {pageNum}
+                    </Button>
+                  );
+                })}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                  className="border-[#B8860B] hover:bg-[#132743]"
+                >
+                  {translate("admin.next")}
+                  <FaAngleRight className="ml-1" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handlePageChange(totalPages)}
+                  disabled={currentPage === totalPages}
+                  className="border-[#B8860B] hover:bg-[#132743]"
+                >
+                  {translate("admin.last")}
+                  <FaAngleDoubleRight className="ml-1" />
+                </Button>
+              </div>
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
+      
+      {/* Order Detail Dialog */}
+      <Dialog open={isDetailDialogOpen} onOpenChange={setIsDetailDialogOpen}>
+        <DialogContent className="bg-[#132743] text-white border-[#B8860B] max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="font-cairo text-2xl">
+              {translate("admin.orderDetails")} #{selectedOrder?.id}
+            </DialogTitle>
+            <DialogDescription className="text-gray-400">
+              {selectedOrder && formatDate(selectedOrder.createdAt)}
+            </DialogDescription>
+          </DialogHeader>
+          
+          {selectedOrder && (
+            <div className="space-y-6 py-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-[#0a0f1a] p-4 rounded-[0.75rem]">
+                  <h3 className="font-cairo text-lg mb-2">{translate("admin.customerInfo")}</h3>
+                  <p><span className="text-gray-400">{translate("admin.name")}:</span> {selectedOrder.firstName} {selectedOrder.lastName}</p>
+                  <p><span className="text-gray-400">{translate("admin.email")}:</span> {selectedOrder.email}</p>
+                  <p><span className="text-gray-400">{translate("admin.phone")}:</span> {selectedOrder.phoneNumber}</p>
+                </div>
+                
+                <div className="bg-[#0a0f1a] p-4 rounded-[0.75rem]">
+                  <h3 className="font-cairo text-lg mb-2">{translate("admin.paymentInfo")}</h3>
+                  <p>
+                    <span className="text-gray-400">{translate("admin.method")}:</span> 
+                    {selectedOrder.paymentMethod === 'bank_transfer' 
+                      ? translate("checkout.bankTransfer") 
+                      : translate("checkout.cashOnDelivery")}
+                  </p>
+                  <p>
+                    <span className="text-gray-400">{translate("admin.paymentStatus")}:</span> 
+                    <Badge className={`ml-2 ${getPaymentStatusBadgeColor(selectedOrder.paymentStatus)}`}>
+                      {selectedOrder.paymentStatus === 'completed' 
+                        ? translate("admin.completed") 
+                        : translate("admin.pending")}
+                    </Badge>
+                  </p>
+                  <p>
+                    <span className="text-gray-400">{translate("admin.orderStatus")}:</span> 
+                    <Badge className={`ml-2 ${getStatusBadgeColor(selectedOrder.status)}`}>
+                      {translate(`admin.${selectedOrder.status}`)}
+                    </Badge>
+                  </p>
+                </div>
+              </div>
+              
+              <div className="bg-[#0a0f1a] p-4 rounded-[0.75rem]">
+                <h3 className="font-cairo text-lg mb-4">{translate("admin.orderedItems")}</h3>
+                <Table>
+                  <TableHeader className="bg-[#132743]">
+                    <TableRow>
+                      <TableHead className="text-white">{translate("admin.product")}</TableHead>
+                      <TableHead className="text-white text-right">{translate("admin.quantity")}</TableHead>
+                      <TableHead className="text-white text-right">{translate("admin.unitPrice")}</TableHead>
+                      <TableHead className="text-white text-right">{translate("admin.total")}</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {selectedOrder.items.map((item) => (
+                      <TableRow key={item.id} className="border-b border-[#132743]">
+                        <TableCell>{item.productName || `Product #${item.productId}`}</TableCell>
+                        <TableCell className="text-right">{item.quantity}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(item.price)}</TableCell>
+                        <TableCell className="text-right font-bold">{formatCurrency(item.price * item.quantity)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                <div className="flex justify-end mt-4">
+                  <div className="w-48">
+                    <div className="flex justify-between py-2">
+                      <span className="text-gray-400">{translate("admin.subtotal")}:</span>
+                      <span>{formatCurrency(selectedOrder.totalAmount)}</span>
+                    </div>
+                    <div className="flex justify-between py-2 border-t border-[#B8860B]">
+                      <span className="font-bold">{translate("admin.totalAmount")}:</span>
+                      <span className="font-cairo font-bold text-primary">{formatCurrency(selectedOrder.totalAmount)}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="bg-[#0a0f1a] p-4 rounded-[0.75rem]">
+                <h3 className="font-cairo text-lg mb-4">{translate("admin.orderActions")}</h3>
+                <div className="flex flex-col space-y-4 md:space-y-0 md:flex-row md:space-x-4">
+                  <div className="space-y-2">
+                    <p className="text-sm text-gray-400">{translate("admin.updateOrderStatus")}</p>
+                    <Select
+                      defaultValue={selectedOrder.status}
+                      onValueChange={(value) => handleUpdateOrderStatus(selectedOrder.id, value)}
+                    >
+                      <SelectTrigger className="w-full md:w-40 bg-[#132743] border-[#B8860B]">
+                        <SelectValue placeholder={translate("admin.selectStatus")} />
+                      </SelectTrigger>
+                      <SelectContent className="bg-[#132743] border-[#B8860B]">
+                        <SelectItem value="pending">{translate("admin.pending")}</SelectItem>
+                        <SelectItem value="paid">{translate("admin.paid")}</SelectItem>
+                        <SelectItem value="delivered">{translate("admin.delivered")}</SelectItem>
+                        <SelectItem value="cancelled">{translate("admin.cancelled")}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <p className="text-sm text-gray-400">{translate("admin.updatePaymentStatus")}</p>
+                    <div className="flex space-x-2">
+                      <Button 
+                        variant={selectedOrder.paymentStatus === 'pending' ? 'default' : 'outline'}
+                        className={selectedOrder.paymentStatus === 'pending' 
+                          ? 'bg-primary hover:bg-primary/90 text-background' 
+                          : 'border-[#B8860B] hover:bg-[#B8860B] hover:text-background'
+                        }
+                        onClick={() => handleUpdatePaymentStatus(selectedOrder.id, 'pending')}
+                      >
+                        {translate("admin.pending")}
+                      </Button>
+                      <Button 
+                        variant={selectedOrder.paymentStatus === 'completed' ? 'default' : 'outline'}
+                        className={selectedOrder.paymentStatus === 'completed' 
+                          ? 'bg-primary hover:bg-primary/90 text-background' 
+                          : 'border-[#B8860B] hover:bg-[#B8860B] hover:text-background'
+                        }
+                        onClick={() => handleUpdatePaymentStatus(selectedOrder.id, 'completed')}
+                      >
+                        {translate("admin.completed")}
+                      </Button>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-2 md:ml-auto">
+                    <p className="text-sm text-gray-400">{translate("admin.notifications")}</p>
+                    <Button 
+                      variant="outline"
+                      className="border-primary text-primary hover:bg-primary hover:text-background w-full md:w-auto"
+                      onClick={() => handleSendEmailNotification(selectedOrder.id)}
+                      disabled={sendEmailNotificationMutation.isPending}
+                    >
+                      {sendEmailNotificationMutation.isPending ? (
+                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                      ) : (
+                        <FaEnvelope className="mr-2" />
+                      )}
+                      {translate("admin.sendEmailNotification")}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Game Code Management Section */}
+              {orderItems.length > 0 && selectedOrder && (
+                <>
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="font-cairo text-xl mb-0">{translate("admin.gameCodes")}</h3>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="border-[#B8860B] hover:bg-[#132743]"
+                        onClick={handleEditAll}
+                      >
+                        <FaEdit className="mr-2" />
+                        {translate("admin.editAllCodes") || "Edit All Codes"}
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Game code management interface with tabs */}
+                  <div className="mt-6">
+                    <Tabs defaultValue="new" className="w-full">
+                      <TabsList className="grid w-full grid-cols-2 bg-[#0a0f1a]">
+                        <TabsTrigger value="new" className="data-[state=active]:bg-[#132743]">
+                          {translate("admin.gameCodesManagement") || "Game Codes Management"}
+                        </TabsTrigger>
+                        <TabsTrigger value="legacy" className="data-[state=active]:bg-[#132743]">
+                          {translate("admin.legacyInterface") || "Legacy Interface"}
+                        </TabsTrigger>
+                      </TabsList>
+                      
+                      <TabsContent value="legacy" className="border border-[#132743] rounded-b-md">
+                        {/* Legacy game code management interface */}
+                        <div className="bg-[#0a0f1a] p-4 rounded-[0.75rem]">
+                          <h3 className="font-cairo text-lg mb-4">{translate("admin.gameCodes")}</h3>
+                    
+                    {/* Check if we already have game codes */}
+                  {selectedOrder.gameCodes && selectedOrder.gameCodes.length > 0 ? (
+                    <div className="space-y-4">
+                      <Alert className="bg-[#132743] border-green-600">
+                        <FaCheck className="h-4 w-4 text-green-500" />
+                        <AlertDescription className="text-green-400">
+                          {translate("admin.gameCodesSent") || "Game codes have been sent to the customer"}
+                        </AlertDescription>
+                      </Alert>
+                      
+                      <div className="flex justify-between items-center mb-4">
+                        <div className="flex space-x-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="border-[#B8860B] hover:bg-[#132743]"
+                            onClick={handleEditAll}
+                          >
+                            <FaEdit className="mr-2" />
+                            {translate("admin.editAllCodes") || "Edit All Codes"}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="border-[#B8860B] hover:bg-[#132743]"
+                            onClick={handleCancelEdit}
+                            disabled={Object.keys(isEditing).length === 0}
+                          >
+                            <FaTimes className="mr-2" />
+                            {translate("admin.cancelButton") || "Cancel"}
+                          </Button>
+                        </div>
+                        <Button
+                          variant="outline" 
+                          size="sm"
+                          className="border-[#B8860B] hover:bg-[#132743]"
+                          onClick={handleSaveGameCodes}
+                          disabled={isSubmitting || Object.keys(isEditing).length === 0}
+                        >
+                          {isSubmitting ? (
+                            <>
+                              <FaSpinner className="mr-2 animate-spin" />
+                              {translate("admin.saving") || "Saving..."}
+                            </>
+                          ) : (
+                            <>
+                              <FaSave className="mr-2" />
+                              {translate("admin.saveCodes") || "Save Codes"}
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                      
+                      <Table>
+                        <TableHeader className="bg-[#132743]">
+                          <TableRow>
+                            <TableHead className="text-white">{translate("admin.product")}</TableHead>
+                            <TableHead className="text-white">{translate("admin.platform")}</TableHead>
+                            <TableHead className="text-white">{translate("admin.gameCode")}</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {selectedOrder.gameCodes.map((code) => {
+                            const matchingItem = orderItems.find(item => item.productId === code.productId);
+                            return (
+                              <TableRow key={code.id} className="border-b border-[#132743]">
+                                <TableCell>{matchingItem?.name || `Product #${code.productId}`}</TableCell>
+                                <TableCell>{matchingItem?.platform || "-"}</TableCell>
+                                <TableCell>
+                                  <div className="flex items-center space-x-2">
+                                    {isEditing[code.productId] ? (
+                                      <div className="flex items-center space-x-2 w-full">
+                                        <Input
+                                          className="bg-[#132743] border-[#B8860B] focus:border-primary"
+                                          value={gameCodes[code.productId] || ''}
+                                          onChange={(e) => setGameCodes({
+                                            ...gameCodes,
+                                            [code.productId]: e.target.value
+                                          })}
+                                          placeholder={translate("admin.enterGameCode")}
+                                        />
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          className="h-8 w-8 p-0 text-red-400"
+                                          onClick={() => {
+                                            setIsEditing({
+                                              ...isEditing,
+                                              [code.productId]: false
+                                            });
+                                          }}
+                                        >
+                                          <FaTimes className="h-4 w-4" />
+                                          <span className="sr-only">{translate("admin.cancelButton")}</span>
+                                        </Button>
+                                      </div>
+                                    ) : (
+                                      <>
+                                        <code className="bg-[#0a0f1a] p-1 rounded text-green-400 font-mono">
+                                          {code.code}
+                                        </code>
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          className="h-8 w-8 p-0 text-amber-400"
+                                          onClick={() => {
+                                            setGameCodes({
+                                              ...gameCodes,
+                                              [code.productId]: code.code
+                                            });
+                                            setIsEditing({
+                                              ...isEditing,
+                                              [code.productId]: true
+                                            });
+                                          }}
+                                        >
+                                          <FaEdit className="h-4 w-4" />
+                                          <span className="sr-only">{translate("admin.edit")}</span>
+                                        </Button>
+                                      </>
+                                    )}
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                      
+                      <div className="flex justify-end space-x-2">
+                        <Button
+                          variant="outline"
+                          className="border-[#B8860B] text-[#B8860B] hover:bg-[#B8860B] hover:text-white"
+                          onClick={() => handleSendEmailNotification(selectedOrder.id)}
+                        >
+                          <FaEnvelope className="mr-2" />
+                          {translate("admin.resendCodes") || "Resend Codes"}
+                        </Button>
+                        {Object.keys(isEditing).some(key => isEditing[parseInt(key)]) && (
+                          <Button
+                            className="bg-primary hover:bg-primary/90 text-background"
+                            onClick={handleSaveGameCodes}
+                            disabled={isSubmitting}
+                          >
+                            {isSubmitting ? (
+                              <svg className="animate-spin -ml-1 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                            ) : (
+                              <FaSave className="mr-2" />
+                            )}
+                            {translate("admin.saveChanges") || "Save Changes"}
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      <Alert className="bg-[#132743] border-yellow-600">
+                        <FaExclamationTriangle className="h-4 w-4 text-yellow-500" />
+                        <AlertDescription className="text-yellow-400">
+                          {translate("admin.noGameCodesYet") || "No game codes have been assigned yet"}
+                        </AlertDescription>
+                      </Alert>
+                      
+                      {selectedOrder.paymentStatus !== 'completed' && (
+                        <Alert className="bg-[#132743] border-blue-600">
+                          <FaInfo className="h-4 w-4 text-blue-500" />
+                          <AlertDescription className="text-blue-400">
+                            {translate("admin.addGameCodesBeforePayment") || "You can add game codes now, even though payment is not yet complete."}
+                            <div className="mt-2 text-yellow-400 border border-yellow-500 bg-yellow-900/30 p-2 rounded">
+                              <div className="flex items-center gap-2 font-bold">
+                                <FaExclamationTriangle />
+                                {translate("admin.bankVerificationRequired") || "IMPORTANT: Bank verification required"}
+                              </div>
+                              <p className="text-sm">
+                                {translate("admin.bankVerificationRequiredDesc") || "Only add game codes after verifying payment receipt in the bank account. Codes are NOT automatically assigned."}
+                              </p>
+                            </div>
+                          </AlertDescription>
+                        </Alert>
+                      )}
+                      
+                      <div className="flex justify-end mb-4">
+                        <Button
+                          variant="outline" 
+                          size="sm"
+                          className="border-[#B8860B] hover:bg-[#132743]"
+                          onClick={handleSaveGameCodes}
+                          disabled={isSubmitting || Object.keys(gameCodes).length === 0}
+                        >
+                          {isSubmitting ? (
+                            <>
+                              <FaSpinner className="mr-2 animate-spin" />
+                              {translate("admin.saving") || "Saving..."}
+                            </>
+                          ) : (
+                            <>
+                              <FaSave className="mr-2" />
+                              {translate("admin.saveCodes") || "Save Codes"}
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                      
+                      <Table>
+                        <TableHeader className="bg-[#132743]">
+                          <TableRow>
+                            <TableHead className="text-white">{translate("admin.product")}</TableHead>
+                            <TableHead className="text-white">{translate("admin.platform")}</TableHead>
+                            <TableHead className="text-white">{translate("admin.edition")}</TableHead>
+                            <TableHead className="text-white">{translate("admin.gameCode")}</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {orderItems.map((item) => (
+                            <TableRow key={item.id} className="border-b border-[#132743]">
+                              <TableCell>
+                                <div className="font-medium">{item.productName || `Product #${item.productId}`}</div>
+                                <div className="text-xs text-gray-400">
+                                  {item.productType === "giftCard" ? translate("admin.giftCard") : translate("admin.game")}
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="outline" className="bg-[#132743] text-white border-[#B8860B]">
+                                  {item.platform || "-"}
+                                </Badge>
+                              </TableCell>
+                              <TableCell>
+                                {item.editionName ? (
+                                  <Badge variant="outline" className="bg-[#132743] text-white border-green-600">
+                                    {item.editionName}
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="outline" className="bg-[#132743] text-white border-[#B8860B]">
+                                    {translate("admin.standardEdition")}
+                                  </Badge>
+                                )}
+                              </TableCell>
+                              <TableCell className="w-1/3">
+                                <div className="flex items-center space-x-2">
+                                  <Input
+                                    className="bg-[#132743] border-[#B8860B] focus:border-primary"
+                                    value={gameCodes[item.productId] || ''}
+                                    onChange={(e) => setGameCodes({
+                                      ...gameCodes,
+                                      [item.productId]: e.target.value
+                                    })}
+                                    placeholder={
+                                      item.productType === "giftCard" 
+                                      ? translate("admin.enterGiftCardCode") 
+                                      : translate("admin.enterGameCode")
+                                    }
+                                  />
+                                </div>
+                                <div className="mt-1 text-xs text-gray-400">
+                                  {item.productType === "giftCard" 
+                                    ? translate("admin.giftCardCodeHelp") 
+                                    : translate("admin.gameCodeHelp")}
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                      
+                      <div className="flex justify-end">
+                        <Button
+                          className="bg-primary hover:bg-primary/90 text-background"
+                          onClick={handleSaveGameCodes}
+                          disabled={isSubmitting}
+                        >
+                          {isSubmitting ? (
+                            <svg className="animate-spin -ml-1 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                          ) : (
+                            <FaSave className="mr-2" />
+                          )}
+                          {translate("admin.saveGameCodes")}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </TabsContent>
+          
+          <TabsContent value="new" className="border border-[#132743] rounded-b-md">
+            {selectedOrder && (
+              <GameCodeForm
+                orderItems={orderItems}
+                gameCodes={gameCodes}
+                isEditing={isEditing}
+                isSubmitting={isSubmitting}
+                selectedOrder={selectedOrder}
+                onSave={handleSaveGameCodes}
+                onCodeChange={handleCodeChange}
+                onToggleEdit={handleToggleEdit}
+                onEditAll={handleEditAll}
+                onCancelEdit={handleCancelEdit}
+                translate={translate}
+              />
+            )}
+          </TabsContent>
+        </Tabs>
+              </div>
+            </>
+          )
+          
+          <DialogFooter>
+            <Button 
+              onClick={() => setIsDetailDialogOpen(false)}
+              className="bg-primary hover:bg-primary/90 text-background"
+            >
+              {translate("admin.close")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+};
+
+interface OrdersTableProps {
+  orders: OrderDetail[];
+  isLoading: boolean;
+  sortField: SortField;
+  sortDirection: SortDirection;
+  onSort: (field: SortField) => void;
+  onViewOrder: (orderId: number) => void;
+  onUpdateOrderStatus: (orderId: number, status: string) => void;
+  onUpdatePaymentStatus: (orderId: number, paymentStatus: string) => void;
+  getStatusBadgeColor: (status: string) => string;
+  getPaymentStatusBadgeColor: (status: string) => string;
+  translate: (key: string) => string;
+}
+
+const OrdersTable = ({ 
+  orders, 
+  isLoading, 
+  sortField, 
+  sortDirection, 
+  onSort, 
+  onViewOrder, 
+  onUpdateOrderStatus, 
+  onUpdatePaymentStatus, 
+  getStatusBadgeColor, 
+  getPaymentStatusBadgeColor, 
+  translate 
+}: OrdersTableProps) => {
+  if (isLoading) {
+    return (
+      <div className="text-center py-10">
+        <svg className="animate-spin h-8 w-8 text-primary mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        <p className="text-gray-400 mt-2">{translate("admin.loading")}</p>
+      </div>
+    );
+  }
+  
+  if (orders.length === 0) {
+    return (
+      <Alert className="bg-[#0a0f1a] border-[#B8860B]">
+        <FaExclamationTriangle className="h-4 w-4 text-[#E63946]" />
+        <AlertDescription>
+          {translate("admin.noOrdersFound")}
+        </AlertDescription>
+      </Alert>
+    );
+  }
+  
+  return (
+    <div className="bg-[#132743] rounded-[0.75rem] overflow-x-auto">
+      <Table>
+        <TableHeader className="bg-[#0a0f1a]">
+          <TableRow>
+            <TableHead className="text-white">{translate("admin.orderId")}</TableHead>
+            <TableHead className="text-white">{translate("admin.customer")}</TableHead>
+            <TableHead className="text-white cursor-pointer" onClick={() => onSort('date')}>
+              <div className="flex items-center">
+                {translate("admin.date")}
+                {sortField === 'date' && (
+                  <span className="ml-1">
+                    {sortDirection === 'desc' ? <FaSortAmountDown size={14} /> : <FaSortAmountUp size={14} />}
+                  </span>
+                )}
+              </div>
+            </TableHead>
+            <TableHead className="text-white cursor-pointer" onClick={() => onSort('amount')}>
+              <div className="flex items-center">
+                {translate("admin.amount")}
+                {sortField === 'amount' && (
+                  <span className="ml-1">
+                    {sortDirection === 'desc' ? <FaSortAmountDown size={14} /> : <FaSortAmountUp size={14} />}
+                  </span>
+                )}
+              </div>
+            </TableHead>
+            <TableHead className="text-white">{translate("admin.paymentMethod")}</TableHead>
+            <TableHead className="text-white">{translate("admin.paymentStatus")}</TableHead>
+            <TableHead className="text-white cursor-pointer" onClick={() => onSort('status')}>
+              <div className="flex items-center">
+                {translate("admin.orderStatus")}
+                {sortField === 'status' && (
+                  <span className="ml-1">
+                    {sortDirection === 'desc' ? <FaSortAmountDown size={14} /> : <FaSortAmountUp size={14} />}
+                  </span>
+                )}
+              </div>
+            </TableHead>
+            <TableHead className="text-white text-right">{translate("admin.actions")}</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {orders.map((order) => (
+            <TableRow key={order.id} className="border-b border-[#0a0f1a]">
+              <TableCell className="font-medium">#{order.id}</TableCell>
+              <TableCell>
+                <div>
+                  <p>{order.firstName} {order.lastName}</p>
+                  <p className="text-sm text-gray-400">{order.email}</p>
+                </div>
+              </TableCell>
+              <TableCell>{formatDate(order.createdAt)}</TableCell>
+              <TableCell className="font-cairo font-bold text-primary">
+                {formatCurrency(order.totalAmount)}
+              </TableCell>
+              <TableCell>
+                {order.paymentMethod === 'bank_transfer' 
+                  ? translate("checkout.bankTransfer") 
+                  : translate("checkout.cashOnDelivery")}
+              </TableCell>
+              <TableCell>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Badge className={getPaymentStatusBadgeColor(order.paymentStatus)}>
+                      {order.paymentStatus === 'completed' 
+                        ? translate("admin.completed") 
+                        : translate("admin.pending")}
+                    </Badge>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent className="bg-[#0a0f1a] border-[#B8860B]">
+                    <DropdownMenuItem 
+                      className="flex items-center cursor-pointer"
+                      onClick={() => onUpdatePaymentStatus(order.id, 'pending')}
+                    >
+                      <FaTimes className={`mr-2 ${order.paymentStatus === 'pending' ? 'text-primary' : 'text-white'}`} />
+                      {translate("admin.pending")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem 
+                      className="flex items-center cursor-pointer"
+                      onClick={() => onUpdatePaymentStatus(order.id, 'completed')}
+                    >
+                      <FaCheck className={`mr-2 ${order.paymentStatus === 'completed' ? 'text-primary' : 'text-white'}`} />
+                      {translate("admin.completed")}
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </TableCell>
+              <TableCell>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Badge className={getStatusBadgeColor(order.status)}>
+                      {translate(`admin.${order.status}`)}
+                    </Badge>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent className="bg-[#0a0f1a] border-[#B8860B]">
+                    <DropdownMenuItem 
+                      className="cursor-pointer"
+                      onClick={() => onUpdateOrderStatus(order.id, 'pending')}
+                    >
+                      {translate("admin.pending")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem 
+                      className="cursor-pointer"
+                      onClick={() => onUpdateOrderStatus(order.id, 'paid')}
+                    >
+                      {translate("admin.paid")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem 
+                      className="cursor-pointer"
+                      onClick={() => onUpdateOrderStatus(order.id, 'delivered')}
+                    >
+                      {translate("admin.delivered")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem 
+                      className="cursor-pointer"
+                      onClick={() => onUpdateOrderStatus(order.id, 'cancelled')}
+                    >
+                      {translate("admin.cancelled")}
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </TableCell>
+              <TableCell className="text-right">
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  className="border-primary text-primary hover:bg-primary hover:text-background"
+                  onClick={() => onViewOrder(order.id)}
+                >
+                  <FaEye className="mr-1" />
+                  {translate("admin.view")}
+                </Button>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
+};
+
+// Game Code Update Form Component
+const GameCodeUpdateForm: React.FC<GameCodeFormProps> = ({
+  orderItems,
+  gameCodes,
+  isEditing,
+  isSubmitting,
+  selectedOrder,
+  onSave,
+  onCodeChange,
+  onToggleEdit,
+  onEditAll,
+  onCancelEdit,
+  translate
+}) => {
+  // Check if there are existing game codes for this order
+  const hasExistingCodes = selectedOrder.gameCodes && selectedOrder.gameCodes.length > 0;
+
+  return (
+    <div className="bg-[#0a0f1a] p-4 rounded-[0.75rem] mt-6">
+      <h3 className="font-cairo text-lg mb-4">{translate("admin.gameCodes")}</h3>
+      
+      {hasExistingCodes ? (
+        <div className="space-y-4">
+          <Alert className="bg-[#132743] border-green-600">
+            <FaCheck className="h-4 w-4 text-green-500" />
+            <AlertDescription className="text-green-400">
+              {translate("admin.gameCodesSent") || "Game codes have been sent to the customer"}
+            </AlertDescription>
+          </Alert>
+          
+          <div className="flex justify-between items-center mb-4">
+            <div className="flex space-x-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-[#B8860B] hover:bg-[#132743]"
+                onClick={onEditAll}
+              >
+                <FaEdit className="mr-2" />
+                {translate("admin.editAllCodes") || "Edit All Codes"}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-[#B8860B] hover:bg-[#132743]"
+                onClick={onCancelEdit}
+                disabled={Object.keys(isEditing).length === 0}
+              >
+                <FaTimes className="mr-2" />
+                {translate("admin.cancelButton") || "Cancel"}
+              </Button>
+            </div>
+            <Button
+              variant="outline" 
+              size="sm"
+              className="border-[#B8860B] hover:bg-[#132743]"
+              onClick={onSave}
+              disabled={isSubmitting || Object.keys(isEditing).length === 0}
+            >
+              {isSubmitting ? (
+                <>
+                  <FaSpinner className="mr-2 animate-spin" />
+                  {translate("admin.saving") || "Saving..."}
+                </>
+              ) : (
+                <>
+                  <FaSave className="mr-2" />
+                  {translate("admin.saveCodes") || "Save Codes"}
+                </>
+              )}
+            </Button>
+          </div>
+          
+          <Table>
+            <TableHeader className="bg-[#132743]">
+              <TableRow>
+                <TableHead className="text-white">{translate("admin.product")}</TableHead>
+                <TableHead className="text-white">{translate("admin.platform")}</TableHead>
+                <TableHead className="text-white">{translate("admin.gameCode")}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {selectedOrder.gameCodes.map((code) => {
+                const matchingItem = orderItems.find(item => item.productId === code.productId);
+                return (
+                  <TableRow key={code.id} className="border-b border-[#132743]">
+                    <TableCell>{matchingItem?.productName || `Product #${code.productId}`}</TableCell>
+                    <TableCell>{matchingItem?.platform || "-"}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center space-x-2">
+                        {isEditing[code.productId] ? (
+                          <div className="flex items-center space-x-2 w-full">
+                            <Input
+                              className="bg-[#132743] border-[#B8860B] focus:border-primary"
+                              value={gameCodes[code.productId] || ''}
+                              onChange={(e) => onCodeChange(code.productId, e.target.value)}
+                              placeholder={translate("admin.enterGameCode")}
+                            />
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 p-0 text-red-400"
+                              onClick={() => onToggleEdit(code.productId)}
+                            >
+                              <FaTimes className="h-4 w-4" />
+                              <span className="sr-only">{translate("admin.cancelButton")}</span>
+                            </Button>
+                          </div>
+                        ) : (
+                          <>
+                            <code className="bg-[#0a0f1a] p-1 rounded text-green-400 font-mono">
+                              {code.code}
+                            </code>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 p-0 text-amber-400"
+                              onClick={() => {
+                                onCodeChange(code.productId, code.code);
+                                onToggleEdit(code.productId);
+                              }}
+                            >
+                              <FaEdit className="h-4 w-4" />
+                              <span className="sr-only">{translate("admin.edit")}</span>
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+          
+          <div className="flex justify-end space-x-2">
+            <Button
+              className="bg-primary hover:bg-primary/90 text-background"
+              onClick={onSave}
+              disabled={isSubmitting || Object.keys(isEditing).length === 0}
+            >
+              {isSubmitting ? (
+                <svg className="animate-spin -ml-1 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+              ) : (
+                <FaSave className="mr-2" />
+              )}
+              {translate("admin.saveChanges")}
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <Alert className="bg-[#132743] border-yellow-600">
+            <FaExclamationTriangle className="h-4 w-4 text-yellow-500" />
+            <AlertDescription className="text-yellow-400">
+              {translate("admin.noGameCodesYet") || "No game codes have been assigned yet"}
+            </AlertDescription>
+          </Alert>
+          
+          {selectedOrder.paymentStatus !== 'completed' && (
+            <Alert className="bg-[#132743] border-blue-600">
+              <FaInfo className="h-4 w-4 text-blue-500" />
+              <AlertDescription className="text-blue-400">
+                {translate("admin.addGameCodesBeforePayment") || "You can add game codes now, even though payment is not yet complete."}
+                <div className="mt-2 text-yellow-400 border border-yellow-500 bg-yellow-900/30 p-2 rounded">
+                  <div className="flex items-center gap-2 font-bold">
+                    <FaExclamationTriangle />
+                    {translate("admin.bankVerificationRequired") || "IMPORTANT: Bank verification required"}
+                  </div>
+                  <p className="text-sm">
+                    {translate("admin.bankVerificationRequiredDesc") || "Only add game codes after verifying payment receipt in the bank account. Codes are NOT automatically assigned."}
+                  </p>
+                </div>
+              </AlertDescription>
+            </Alert>
+          )}
+          
+          <div className="flex justify-end mb-4">
+            <Button
+              variant="outline" 
+              size="sm"
+              className="border-[#B8860B] hover:bg-[#132743]"
+              onClick={onSave}
+              disabled={isSubmitting || Object.keys(gameCodes).length === 0}
+            >
+              {isSubmitting ? (
+                <>
+                  <FaSpinner className="mr-2 animate-spin" />
+                  {translate("admin.saving") || "Saving..."}
+                </>
+              ) : (
+                <>
+                  <FaSave className="mr-2" />
+                  {translate("admin.saveCodes") || "Save Codes"}
+                </>
+              )}
+            </Button>
+          </div>
+          
+          <Table>
+            <TableHeader className="bg-[#132743]">
+              <TableRow>
+                <TableHead className="text-white">{translate("admin.product")}</TableHead>
+                <TableHead className="text-white">{translate("admin.platform")}</TableHead>
+                <TableHead className="text-white">{translate("admin.edition")}</TableHead>
+                <TableHead className="text-white">{translate("admin.gameCode")}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {orderItems.map((item) => (
+                <TableRow key={item.id} className="border-b border-[#132743]">
+                  <TableCell>
+                    <div className="font-medium">{item.productName || `Product #${item.productId}`}</div>
+                    <div className="text-xs text-gray-400">
+                      {item.productType === "giftCard" ? translate("admin.giftCard") : translate("admin.game")}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className="bg-[#132743] text-white border-[#B8860B]">
+                      {item.platform || "-"}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    {item.editionName ? (
+                      <Badge variant="outline" className="bg-[#132743] text-white border-green-600">
+                        {item.editionName}
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="bg-[#132743] text-white border-[#B8860B]">
+                        {translate("admin.standardEdition")}
+                      </Badge>
+                    )}
+                  </TableCell>
+                  <TableCell className="w-1/3">
+                    <div className="flex items-center space-x-2">
+                      <Input
+                        className="bg-[#132743] border-[#B8860B] focus:border-primary"
+                        value={gameCodes[item.productId] || ''}
+                        onChange={(e) => onCodeChange(item.productId, e.target.value)}
+                        placeholder={
+                          item.productType === "giftCard" 
+                          ? translate("admin.enterGiftCardCode") 
+                          : translate("admin.enterGameCode")
+                        }
+                      />
+                    </div>
+                    <div className="mt-1 text-xs text-gray-400">
+                      {item.productType === "giftCard" 
+                        ? translate("admin.giftCardCodeHelp") 
+                        : translate("admin.gameCodeHelp")}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+          
+          <div className="flex justify-end">
+            <Button
+              className="bg-primary hover:bg-primary/90 text-background"
+              onClick={onSave}
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? (
+                <svg className="animate-spin -ml-1 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+              ) : (
+                <FaSave className="mr-2" />
+              )}
+              {translate("admin.saveGameCodes")}
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default OrderManagement;

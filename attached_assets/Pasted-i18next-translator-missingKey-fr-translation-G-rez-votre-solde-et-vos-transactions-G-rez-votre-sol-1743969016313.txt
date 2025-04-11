@@ -1,0 +1,38 @@
+i18next::translator: missingKey fr translation Gérez votre solde et vos transactions Gérez votre solde et vos transactions
+i18next::translator: missingKey fr translation Accéder à mon portefeuille Accéder à mon portefeuille
+i18next::translator: missingKey fr translation Avantages du portefeuille Sou9Digital Avantages du portefeuille Sou9Digital
+i18next::translator: missingKey fr translation Recevez 3% de cashback sur tous vos achats sur Sou9Digital Recevez 3% de cashback sur tous vos achats sur Sou9Digital
+i18next::translator: missingKey fr translation Paiements rapides Paiements rapides
+i18next::translator: missingKey fr translation Payez vos commandes en un clic avec votre solde disponible Payez vos commandes en un clic avec votre solde disponible
+i18next::translator: missingKey fr translation Historique détaillé Historique détaillé
+i18next::translator: missingKey fr translation Suivez toutes vos transactions et cashbacks facilement Suivez toutes vos transactions et cashbacks facilement
+i18next::translator: missingKey fr translation Mon profil Mon profil
+i18next::translator: missingKey fr translation Administration Administration
+i18next::translator: missingKey fr translation Déconnexion Déconnexion
+i18next::translator: missingKey fr translation admin.promos admin.promos
+i18next::translator: missingKey fr translation admin.totalUsers admin.totalUsers
+i18next::translator: missingKey fr translation admin.newUsers admin.newUsers
+i18next::translator: missingKey fr translation admin.orderStatus admin.orderStatus
+i18next::translator: missingKey fr translation admin.totalUsers admin.totalUsers
+i18next::translator: missingKey fr translation admin.newUsers admin.newUsers
+i18next::translator: missingKey fr translation admin.orderStatus admin.orderStatus
+i18next::translator: missingKey fr translation admin.totalUsers admin.totalUsers
+i18next::translator: missingKey fr translation admin.newUsers admin.newUsers
+i18next::translator: missingKey fr translation admin.orderStatus admin.orderStatus
+Session appears to be expired, refreshing auth state...
+Error fetching users: 
+Error {}
+
+Session appears to be expired, refreshing auth state...
+Error fetching users: 
+Error {}
+
+Session appears to be expired, refreshing auth state...
+Error fetching users: 
+Error {}
+
+Session appears to be expired, refreshing auth state...
+Error fetching users: 
+Error {}
+
+i18next::translator: missingKey fr translation admin.promos admin.promos

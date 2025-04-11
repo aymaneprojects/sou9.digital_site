@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="100" viewBox="0 0 200 100">
+  <!-- Horizontal line with curls -->
+  <path d="M0,50 C25,30 50,70 75,50 S125,30 150,50 S175,70 200,50" fill="none" stroke="#B8860B" stroke-width="1.5" opacity="0.7"/>
+  
+  <!-- Small flower patterns -->
+  <g opacity="0.5">
+    <path d="M25,50 C25,40 35,40 35,50 C35,60 25,60 25,50 Z" fill="none" stroke="#B8860B" stroke-width="0.8"/>
+    <path d="M25,50 C15,50 15,40 25,40 C35,40 35,50 25,50 Z" fill="none" stroke="#B8860B" stroke-width="0.8"/>
+    <path d="M25,50 C25,60 15,60 15,50 C15,40 25,40 25,50 Z" fill="none" stroke="#B8860B" stroke-width="0.8"/>
+    <path d="M25,50 C35,50 35,60 25,60 C15,60 15,50 25,50 Z" fill="none" stroke="#B8860B" stroke-width="0.8"/>
+  </g>
+  
+  <g opacity="0.5">
+    <path d="M100,50 C100,40 110,40 110,50 C110,60 100,60 100,50 Z" fill="none" stroke="#B8860B" stroke-width="0.8"/>
+    <path d="M100,50 C90,50 90,40 100,40 C110,40 110,50 100,50 Z" fill="none" stroke="#B8860B" stroke-width="0.8"/>
+    <path d="M100,50 C100,60 90,60 90,50 C90,40 100,40 100,50 Z" fill="none" stroke="#B8860B" stroke-width="0.8"/>
+    <path d="M100,50 C110,50 110,60 100,60 C90,60 90,50 100,50 Z" fill="none" stroke="#B8860B" stroke-width="0.8"/>
+  </g>
+  
+  <g opacity="0.5">
+    <path d="M175,50 C175,40 185,40 185,50 C185,60 175,60 175,50 Z" fill="none" stroke="#B8860B" stroke-width="0.8"/>
+    <path d="M175,50 C165,50 165,40 175,40 C185,40 185,50 175,50 Z" fill="none" stroke="#B8860B" stroke-width="0.8"/>
+    <path d="M175,50 C175,60 165,60 165,50 C165,40 175,40 175,50 Z" fill="none" stroke="#B8860B" stroke-width="0.8"/>
+    <path d="M175,50 C185,50 185,60 175,60 C165,60 165,50 175,50 Z" fill="none" stroke="#B8860B" stroke-width="0.8"/>
+  </g>
+</svg>

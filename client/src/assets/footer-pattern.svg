@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200">
+  <!-- Grid pattern -->
+  <pattern id="grid" x="0" y="0" width="50" height="50" patternUnits="userSpaceOnUse">
+    <rect x="0" y="0" width="50" height="50" fill="none" stroke="#B8860B" stroke-width="0.5" opacity="0.3"/>
+  </pattern>
+  <rect x="0" y="0" width="200" height="200" fill="url(#grid)"/>
+  
+  <!-- Decorative elements -->
+  <g opacity="0.4">
+    <!-- Center decorative element -->
+    <circle cx="100" cy="100" r="20" fill="none" stroke="#B8860B" stroke-width="0.8"/>
+    <circle cx="100" cy="100" r="15" fill="none" stroke="#B8860B" stroke-width="0.8"/>
+    <circle cx="100" cy="100" r="10" fill="none" stroke="#B8860B" stroke-width="0.8"/>
+    <circle cx="100" cy="100" r="5" fill="none" stroke="#B8860B" stroke-width="0.8"/>
+    
+    <!-- Corner decorative elements -->
+    <path d="M25,25 L45,25 L45,45 L25,45 Z" fill="none" stroke="#B8860B" stroke-width="0.8"/>
+    <path d="M155,25 L175,25 L175,45 L155,45 Z" fill="none" stroke="#B8860B" stroke-width="0.8"/>
+    <path d="M25,155 L45,155 L45,175 L25,175 Z" fill="none" stroke="#B8860B" stroke-width="0.8"/>
+    <path d="M155,155 L175,155 L175,175 L155,175 Z" fill="none" stroke="#B8860B" stroke-width="0.8"/>
+    
+    <!-- Star patterns -->
+    <path d="M75,75 L80,65 L85,75 L95,80 L85,85 L80,95 L75,85 L65,80 Z" fill="none" stroke="#B8860B" stroke-width="0.8"/>
+    <path d="M125,75 L130,65 L135,75 L145,80 L135,85 L130,95 L125,85 L115,80 Z" fill="none" stroke="#B8860B" stroke-width="0.8"/>
+    <path d="M75,125 L80,115 L85,125 L95,130 L85,135 L80,145 L75,135 L65,130 Z" fill="none" stroke="#B8860B" stroke-width="0.8"/>
+    <path d="M125,125 L130,115 L135,125 L145,130 L135,135 L130,145 L125,135 L115,130 Z" fill="none" stroke="#B8860B" stroke-width="0.8"/>
+  </g>
+</svg>

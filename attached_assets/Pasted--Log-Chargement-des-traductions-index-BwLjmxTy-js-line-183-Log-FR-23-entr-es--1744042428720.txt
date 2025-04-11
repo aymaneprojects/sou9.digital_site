@@ -1,0 +1,39 @@
+[Log] 📚 Chargement des traductions: (index-BwLjmxTy.js, line 183)
+[Log] 🇫🇷 FR: – 23 – "entrées" (index-BwLjmxTy.js, line 183)
+[Log] 🇬🇧 EN: – 18 – "entrées" (index-BwLjmxTy.js, line 183)
+[Log] 🇸🇦 AR: – 17 – "entrées" (index-BwLjmxTy.js, line 183)
+[Log] 🌐 Ressources i18n: – Object (index-BwLjmxTy.js, line 183)
+Object
+[Log] i18next: languageChanged – "fr" (index-BwLjmxTy.js, line 183)
+[Log] i18next: initialized – Object (index-BwLjmxTy.js, line 183)
+Object
+[Log] 🔄 Langue actuelle: – "fr" (index-BwLjmxTy.js, line 183)
+[Log] 🔍 Test de traduction "home.title": – "Accueil" (index-BwLjmxTy.js, line 183)
+[Log] 🔍 Test de traduction "navigation.home": – "Accueil" (index-BwLjmxTy.js, line 183)
+[Log] 🔍 Aucun utilisateur trouvé dans localStorage, pas d'authentification nécessaire (index-BwLjmxTy.js, line 183)
+[Log] i18next: languageChanged – "fr" (index-BwLjmxTy.js, line 183)
+[Log] 🔍 Requête /api/products - Est-ce une requête admin? false (index-BwLjmxTy.js, line 48)
+[Warning] ⚠️ Aucun utilisateur trouvé dans localStorage pour la requête /api/products (index-BwLjmxTy.js, line 53)
+[Log] 🚀 Envoi de requête GET vers /api/products avec les en-têtes: – Object (index-BwLjmxTy.js, line 53)
+Object
+[Log] 📥 Réponse reçue de /api/products: status=200  (index-BwLjmxTy.js, line 53)
+[Error] Failed to load resource: the server responded with a status of 404 () (photo-1587826307438-bc8803f9959c, line 0)
+[Error] Failed to load resource: the server responded with a status of 404 () (photo-1616953563098-eb7b0ab6e4b1, line 0)
+[Log] 🔍 Requête /api/products/featured - Est-ce une requête admin? false (index-BwLjmxTy.js, line 48)
+[Warning] ⚠️ Aucun utilisateur trouvé dans localStorage pour la requête /api/products/featured (index-BwLjmxTy.js, line 53)
+[Log] 🚀 Envoi de requête GET vers /api/products/featured avec les en-têtes: – Object (index-BwLjmxTy.js, line 53)
+Object
+[Log] 🔍 Requête /api/products/on-sale - Est-ce une requête admin? false (index-BwLjmxTy.js, line 48)
+[Warning] ⚠️ Aucun utilisateur trouvé dans localStorage pour la requête /api/products/on-sale (index-BwLjmxTy.js, line 53)
+[Log] 🚀 Envoi de requête GET vers /api/products/on-sale avec les en-têtes: – Object (index-BwLjmxTy.js, line 53)
+Object
+[Log] 🔍 Requête /api/testimonials/homepage - Est-ce une requête admin? false (index-BwLjmxTy.js, line 48)
+[Warning] ⚠️ Aucun utilisateur trouvé dans localStorage pour la requête /api/testimonials/homepage (index-BwLjmxTy.js, line 53)
+[Log] 🚀 Envoi de requête GET vers /api/testimonials/homepage avec les en-têtes: – Object (index-BwLjmxTy.js, line 53)
+Object
+[Log] 📥 Réponse reçue de /api/testimonials/homepage: status=200  (index-BwLjmxTy.js, line 53)
+[Log] 📥 Réponse reçue de /api/products/on-sale: status=200  (index-BwLjmxTy.js, line 53)
+[Log] 📥 Réponse reçue de /api/products/featured: status=200  (index-BwLjmxTy.js, line 53)
+[Error] Failed to load resource: the server responded with a status of 404 () (photo-1587826307438-bc8803f9959c, line 0)
+> Élément sélectionné
+< <div class="absolute inset-0 overflow-hidden z-0 " aria-hidden="true">…</div>
