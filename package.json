@@ -11,6 +11,7 @@
     "db:push": "drizzle-kit push"
   },
   "dependencies": {
+    
     "@hookform/resolvers": "^3.9.1",
     "@jridgewell/trace-mapping": "^0.3.25",
     "@neondatabase/serverless": "^0.10.4",
@@ -111,5 +112,18 @@
   },
   "optionalDependencies": {
     "bufferutil": "^4.0.8"
-  }
+  },
+
+  "engines": {
+        "node": "18.x"
+  },
+  
+  "render": {
+  "buildCommand": "npm install && npm run build",
+  "startCommand": "npm start"
 }
+
+
+}
+
+
